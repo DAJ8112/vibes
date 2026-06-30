@@ -1,0 +1,102 @@
+# ─────────────────────────────────────────────────────────────
+# Common .gitignore for the "vibes" monorepo
+# Projects: curly (Python TUI), fifa (Python TUI), habits (Swift/Xcode), looper (browser ext)
+# ─────────────────────────────────────────────────────────────
+
+# ── macOS ──
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ── Editors / IDEs ──
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Claude Code (machine-local only; keep shared settings.json) ──
+.claude/settings.local.json
+
+# ─────────────────────────────────────────────────────────────
+# Python  (curly, fifa)
+# ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test / lint / type caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# ─────────────────────────────────────────────────────────────
+# curly — runtime data / secrets (never commit)
+# ─────────────────────────────────────────────────────────────
+secrets.local.yaml
+history.jsonl
+
+# ─────────────────────────────────────────────────────────────
+# Swift / Xcode  (habits)
+# ─────────────────────────────────────────────────────────────
+# User-specific Xcode state
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+
+# Build output
+DerivedData/
+build/
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.app
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# XcodeGen-generated project — regenerate with `xcodegen generate`
+*.xcodeproj/
+
+# ─────────────────────────────────────────────────────────────
+# JavaScript / Node  (looper, and any future web tooling)
+# ─────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tgz
+
+# ── Environment / secret files (any project) ──
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.keystore
+*.mobileprovision
+
+curly/
