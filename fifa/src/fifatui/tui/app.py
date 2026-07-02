@@ -33,7 +33,7 @@ class FifaApp(App):
         super().__init__()
         self.league = league
         self.favorite = favorite
-        self.refresh = max(5.0, refresh)
+        self.refresh_interval = max(5.0, refresh)
         self.start_match = start_match
         self.date = date
         self.demo_goal = demo_goal
@@ -54,7 +54,7 @@ class FifaApp(App):
     def on_mount(self) -> None:
         self.push_screen(MatchListScreen())
         self.run_worker(self.refresh_data(), exclusive=False)
-        self.set_interval(self.refresh, self._scheduled_poll)
+        self.set_interval(self.refresh_interval, self._scheduled_poll)
 
     async def _scheduled_poll(self) -> None:
         await self.refresh_data()
