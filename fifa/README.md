@@ -4,9 +4,11 @@ A **live football score tracker for your terminal** — with visuals, not just `
 
 Built for the **FIFA World Cup 2026** (works for any ESPN soccer league). Two ways to use it:
 
-- **`fifa`** — a full-screen TUI: pick a match and watch it live, with a big score, match
-  clock, possession & stat bars, an event feed (goals / cards with player names), and a
-  full-screen **goal celebration** animation when someone scores.
+- **`fifa`** — a full-screen TUI styled like an **LED stadium scoreboard**: pick a match
+  and watch it live with a chunky pixel-font score tinted in team colours, pixel-art team
+  flags, possession & stat bars, an event feed, a bottom ticker with the other live scores,
+  and animations for the big moments — **pixel fireworks** when someone scores, plus
+  kickoff / half-time / full-time / card / substitution banners.
 - **`fifa --line`** — one compact status line for your **tmux bar, shell prompt, or
   Claude Code statusline**, so you can keep an eye on the score while you work.
 
@@ -23,7 +25,8 @@ pip install -e .          # from this directory
 # or: pipx install .
 ```
 
-Requires Python ≥ 3.10. Dependencies: [Textual](https://textual.textualize.io/) and
+Requires Python ≥ 3.10 and a truecolor terminal. Dependencies:
+[Textual](https://textual.textualize.io/) ≥ 1.0 (the custom theme API) and
 [httpx](https://www.python-httpx.org/).
 
 ## Usage
@@ -35,9 +38,12 @@ fifa --match 760488       # jump straight into one match
 fifa --league eng.1       # a different league (Premier League)
 fifa --date 20260629      # a specific date (YYYYMMDD)
 fifa --refresh 10         # poll every 10s (default 15)
-fifa --demo-goal          # preview the goal celebration
+fifa --demo goal          # preview an animation: goal|yellow|red|sub|kickoff|ht|ft
 fifa --line               # print one status line and exit
 ```
+
+For offline visual tinkering, `fifa --fixture tests/fixtures/scoreboard.json` runs the
+full TUI against a saved scoreboard instead of the network (combine with `--demo …`).
 
 **Keys in the TUI:** `↵` open match · `r` refresh · `esc`/`←` back · `q` quit.
 
@@ -73,7 +79,7 @@ shootout, possession / shots / corners / fouls, and the goal & card feed with pl
 
 ```bash
 pip install -e ".[dev]"
-pytest                    # 24 tests, runs offline against tests/fixtures/
+pytest                    # runs offline against tests/fixtures/
 ```
 
 Tests run against captured fixtures (`tests/fixtures/`) so they don't need the network.

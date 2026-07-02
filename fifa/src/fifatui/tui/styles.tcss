@@ -1,43 +1,60 @@
-/* fifatui — terminal styles */
+/* fifatui — stadium scoreboard theme */
 
 Screen {
     layers: base overlay;
     background: $surface;
 }
 
+Footer {
+    background: $panel;
+}
+
 /* ---- Match list ---- */
 #list-title {
-    dock: top;
     height: 1;
     padding: 0 1;
     background: $panel;
-    color: $text;
+    color: $amber;
     text-style: bold;
 }
 #list-status {
-    dock: top;
     height: 1;
     padding: 0 1;
-    color: $text-muted;
+    color: $amber-dim;
 }
 #match-table {
     height: 1fr;
 }
+#match-list {
+    height: 1fr;
+    background: $surface;
+    border: none;
+    padding: 0 1;
+}
+#match-list > .option-list--option-highlighted {
+    background: $unlit;
+    text-style: none;
+}
+#match-list:focus > .option-list--option-highlighted {
+    background: $unlit;
+    text-style: none;
+}
+#match-list > .option-list--option-disabled {
+    color: $amber-dim;
+}
 
 /* ---- Watch view ---- */
 #topbar {
-    dock: top;
     height: 1;
     padding: 0 1;
     background: $panel;
-    color: $text;
+    color: $amber;
     text-style: bold;
 }
 #statusbar {
-    dock: top;
     height: 1;
     padding: 0 1;
-    color: $text-muted;
+    color: $amber-dim;
 }
 
 ScoreBoard {
@@ -57,12 +74,12 @@ ScoreBoard {
     width: auto;
     min-width: 18;
     content-align: center middle;
-    color: $text;
+    color: $amber;
 }
 #status-line {
     height: 1;
     content-align: center middle;
-    color: $text-muted;
+    color: $amber-dim;
 }
 
 StatBars {
@@ -73,10 +90,17 @@ StatBars {
 EventFeed {
     height: 1fr;
     padding: 0 2;
-    border-top: round $panel;
+    border-top: round $unlit;
 }
 #event-list {
     height: auto;
+}
+
+/* ---- Score ticker (other live matches) ---- */
+ScoreTicker {
+    height: 1;
+    background: $panel;
+    color: $amber-dim;
 }
 
 /* ---- Goal celebration overlay ---- */
@@ -85,7 +109,16 @@ GoalCelebration {
     layer: overlay;
     width: 100%;
     height: 100%;
+    background: $surface;
+}
+
+/* ---- Event banner strip (cards, subs, kickoff/HT/FT) ---- */
+EventBanner {
+    display: none;
+    layer: overlay;
+    width: 100%;
+    height: 7;
+    margin-top: 9;
+    background: $panel;
     content-align: center middle;
-    text-align: center;
-    background: black;
 }

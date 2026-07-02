@@ -1,15 +1,31 @@
-"""Match list: today's matches grouped live -> upcoming -> finished. Enter opens one."""
+"""Match list: today's matches as rows on the stadium board. Enter opens one."""
 
 from __future__ import annotations
 
 import time
 
+from rich.console import Group
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Static
+from textual.widgets import Footer, OptionList, Static
+from textual.widgets.option_list import Option
 
-from ...api.models import Match
+from ...api.models import Match, MatchState
+from ...art import theme
+from ...art.pixelflags import team_mark
+from ..anim import FrameAnimator
+
+_WHEN_W = 8    # left column: pulse dot + clock / kickoff / FT
+_NAME_W = 20
+_SCORE_W = 16
+_MID_W = _NAME_W + _SCORE_W + _NAME_W
+
+_GROUP_LABEL = {
+    MatchState.IN: "LIVE",
+    MatchState.PRE: "UPCOMING",
+    MatchState.POST: "FULL TIME",
+}
 
 
 class MatchListScreen(Screen):
@@ -21,82 +37,177 @@ class MatchListScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Static(id="list-title")
         yield Static(id="list-status")
-        yield DataTable(id="match-table", cursor_type="row", zebra_stripes=True)
+        yield OptionList(id="match-list")
         yield Footer()
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._breath = FrameAnimator(self)
+
     def on_mount(self) -> None:
-        table = self.query_one(DataTable)
-        table.add_columns("When", "Home", "Score", "Away", "Info")
         self.query_one("#list-title", Static).update(self._title())
+        self.query_one(OptionList).focus()
         self.on_data_refresh()
 
-    def _title(self) -> str:
+    def on_unmount(self) -> None:
+        self._breath.stop()
+
+    def _breathe(self, elapsed: float) -> bool:
+        if not (self.is_current and self.app.app_focus):
+            return True
+        ol = self.query_one(OptionList)
+        phase = int(elapsed * 2)
+        for m in self.app.matches:
+            if m.is_live:
+                try:
+                    ol.replace_option_prompt(m.id, self._row(m, phase))
+                except Exception:
+                    pass
+        return True
+
+    def _title(self) -> Text:
         league = self.app.league
         name = "FIFA World Cup 2026" if league == "fifa.world" else league
-        return f"⚽  {name} — Live Scores"
+        t = Text()
+        t.append("◉ ", style=theme.AMBER)
+        t.append(f"{name.upper()} — LIVE SCORES", style=f"bold {theme.AMBER}")
+        return t
 
     # Called by the app after every poll.
     def on_data_refresh(self) -> None:
-        table = self.query_one(DataTable)
-        if not table.columns:
-            # A poll can land before this screen's on_mount has added columns;
-            # on_mount will repopulate once they exist.
+        try:
+            ol = self.query_one(OptionList)
+        except Exception:
             return
-        prev_key = None
-        if table.row_count and table.is_valid_coordinate(table.cursor_coordinate):
+
+        prev_id = None
+        if ol.highlighted is not None:
             try:
-                prev_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+                prev_id = ol.get_option_at_index(ol.highlighted).id
             except Exception:
-                prev_key = None
+                prev_id = None
 
-        table.clear()
+        ol.clear_options()
+        state = None
         for m in self.app.matches:
-            table.add_row(*self._row(m), key=m.id)
+            if m.state != state:
+                state = m.state
+                header = Text()
+                header.append("· · ", style=theme.UNLIT)
+                header.append(_GROUP_LABEL.get(state, ""), style=f"bold {theme.AMBER_DIM}")
+                header.append(" · ·", style=theme.UNLIT)
+                ol.add_option(Option(Group(Text(""), header), disabled=True))
+            ol.add_option(Option(self._row(m), id=m.id))
+        if not self.app.matches:
+            ol.add_option(Option(Text("No matches today.", style=theme.TEXT_DIM), disabled=True))
 
-        if prev_key is not None:
+        self._highlight(ol, prev_id)
+        self._update_status()
+
+        any_live = any(m.is_live for m in self.app.matches)
+        if any_live and not self._breath.running:
+            self._breath.start(2, self._breathe)
+        elif not any_live:
+            self._breath.stop()
+
+    def _highlight(self, ol: OptionList, prev_id: str | None) -> None:
+        if prev_id is not None:
             try:
-                table.move_cursor(row=table.get_row_index(prev_key))
+                ol.highlighted = ol.get_option_index(prev_id)
+                return
             except Exception:
                 pass
-        self._update_status()
+        for i in range(ol.option_count):
+            if not ol.get_option_at_index(i).disabled:
+                ol.highlighted = i
+                return
 
     def _update_status(self) -> None:
         app = self.app
         if not app.connection_ok:
-            state = Text("⚠ reconnecting…", style="yellow")
+            state = Text("▲ RECONNECTING", style=f"bold {theme.CARD_YELLOW}")
         elif app.last_updated:
             ago = max(0, int(time.time() - app.last_updated))
-            state = Text(f"● updated {ago}s ago", style="green")
+            state = Text(f"● updated {ago}s ago", style=theme.AMBER_DIM)
         else:
-            state = Text("loading…", style="dim")
+            state = Text("loading…", style=theme.TEXT_DIM)
         n_live = sum(1 for m in app.matches if m.is_live)
         line = Text()
         line.append_text(state)
-        line.append(f"   {n_live} live · {len(app.matches)} today", style="dim")
-        line.append("    ↵ open match  ·  r refresh  ·  q quit", style="dim")
+        line.append(f"   {n_live} live · {len(app.matches)} today", style=theme.TEXT_DIM)
+        line.append("    ↵ open match  ·  r refresh  ·  q quit", style=theme.TEXT_DIM)
         self.query_one("#list-status", Static).update(line)
 
-    def _row(self, m: Match):
+    def _row(self, m: Match, phase: int = 0) -> Group:
+        home_mark = team_mark(m.home.abbr, m.home.color_hex)
+        away_mark = team_mark(m.away.abbr, m.away.color_hex)
+
+        line1 = Text()
+        line1.append_text(self._when(m, phase))
+        line1.append(" ")
+        line1.append_text(home_mark[0])
+        line1.append(" ")
+        line1.append_text(self._name_cell(m.home, align="right"))
+        line1.append_text(self._score_cell(m))
+        line1.append_text(self._name_cell(m.away, align="left"))
+        line1.append(" ")
+        line1.append_text(away_mark[0])
+
+        line2 = Text()
+        line2.append(" " * (_WHEN_W + 1))
+        line2.append_text(home_mark[1])
+        line2.append(" ")
+        info = m.note or m.venue_city or m.venue or ""
+        if len(info) > _MID_W:
+            info = info[: _MID_W - 1] + "…"
+        line2.append(info.center(_MID_W), style=theme.TEXT_DIM)
+        line2.append(" ")
+        line2.append_text(away_mark[1])
+
+        return Group(line1, line2)
+
+    @staticmethod
+    def _when(m: Match, phase: int = 0) -> Text:
+        t = Text()
         if m.is_live:
-            when = Text("● LIVE", style="bold red")
+            dot_style = theme.LIVE_PULSE[phase % len(theme.LIVE_PULSE)]
+            clock = (m.status_detail or "LIVE")[: _WHEN_W - 2]
+            t.append("● ", style=f"bold {dot_style}")
+            t.append(clock.ljust(_WHEN_W - 2), style=f"bold {theme.AMBER}")
         elif m.is_finished:
-            when = Text(m.status_detail or "FT", style="dim")
+            t.append((m.status_detail or "FT")[:_WHEN_W].ljust(_WHEN_W), style=theme.TEXT_DIM)
         else:
-            when = Text(self._kickoff(m), style="cyan")
+            t.append(MatchListScreen._kickoff(m).ljust(_WHEN_W), style=theme.AMBER_DIM)
+        return t
 
-        home = Text(f"{m.home.flag} {m.home.name}", style="bold" if m.home.winner else "")
-        away = Text(f"{m.away.name} {m.away.flag}", style="bold" if m.away.winner else "")
+    @staticmethod
+    def _name_cell(team, align: str) -> Text:
+        star = 2 if team.winner else 0
+        label = team.name
+        if len(label) > _NAME_W - star:
+            label = label[: _NAME_W - star - 1] + "…"
+        pad = _NAME_W - len(label) - star
+        style = f"bold {team.color_hex}" if team.winner else team.color_hex
+        t = Text()
+        if align == "right":
+            t.append(" " * pad)
+        t.append(label, style=style)
+        if team.winner:
+            t.append(" ★", style=f"bold {theme.WIN_GOLD}")
+        if align == "left":
+            t.append(" " * pad)
+        return t
 
+    @staticmethod
+    def _score_cell(m: Match) -> Text:
         if m.is_upcoming:
-            score = Text("vs", style="dim")
-        else:
-            sc = f"{m.home.score} - {m.away.score}"
-            if m.has_shootout:
-                sc += f"  ({m.home.shootout_score or 0}-{m.away.shootout_score or 0}p)"
-            score = Text(sc, style="bold")
-
-        info = m.note or m.venue_city or m.venue
-        return (when, home, score, away, Text(info, style="dim"))
+            return Text("vs".center(_SCORE_W), style=theme.TEXT_DIM)
+        sc = f"{m.home.score} - {m.away.score}"
+        if m.has_shootout:
+            sc += f" ({m.home.shootout_score or 0}-{m.away.shootout_score or 0}p)"
+        if len(sc) > _SCORE_W:
+            sc = sc[:_SCORE_W]
+        return Text(sc.center(_SCORE_W), style=f"bold {theme.AMBER}")
 
     @staticmethod
     def _kickoff(m: Match) -> str:
@@ -104,8 +215,9 @@ class MatchListScreen(Screen):
             return m.date.split("T", 1)[1].rstrip("Z")[:5]
         return "—"
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        self.app.open_match(event.row_key.value)
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option_id is not None:
+            self.app.open_match(event.option_id)
 
     def action_refresh(self) -> None:
         self.app.run_worker(self.app.refresh_data())

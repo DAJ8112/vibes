@@ -7,6 +7,7 @@ from rich.text import Text
 from textual.widgets import Static
 
 from ...api.models import Match
+from ...art import theme
 
 BAR = "█"
 BAR_WIDTH = 30
@@ -24,7 +25,7 @@ class StatBars(Static):
             for v in (hs.possession, hs.shots, hs.corners, hs.fouls, as_.possession)
         )
         if not has_stats:
-            return Text("No live stats yet.", style="dim")
+            return Text("No live stats yet.", style=theme.TEXT_DIM)
 
         rows = []
         if hs.possession is not None or as_.possession is not None:
@@ -44,10 +45,10 @@ class StatBars(Static):
         t = Text()
         t.append(f"{round(hp):>3}% ", style=f"bold {hc}")
         t.append(BAR * hw, style=hc)
-        t.append("│", style="grey50")
+        t.append("│", style=theme.AMBER_DIM)
         t.append(BAR * aw, style=ac)
         t.append(f" {round(ap)}%", style=f"bold {ac}")
-        t.append("   Possession", style="dim")
+        t.append("   Possession", style=theme.AMBER_DIM)
         return t
 
     @staticmethod
@@ -61,10 +62,10 @@ class StatBars(Static):
             hw = BAR_WIDTH // 2
         aw = BAR_WIDTH - hw
         t = Text()
-        t.append(f"{hv:>3} ", style="bold")
+        t.append(f"{hv:>3} ", style=f"bold {theme.AMBER}")
         t.append(BAR * hw, style=hc)
-        t.append("│", style="grey50")
+        t.append("│", style=theme.AMBER_DIM)
         t.append(BAR * aw, style=ac)
-        t.append(f" {av}", style="bold")
-        t.append(f"   {label}", style="dim")
+        t.append(f" {av}", style=f"bold {theme.AMBER}")
+        t.append(f"   {label}", style=theme.AMBER_DIM)
         return t

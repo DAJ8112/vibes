@@ -192,3 +192,13 @@ def load_fixture(path: str, league: str = "fifa.world") -> list[Match]:
     """Parse a saved scoreboard JSON file (used by tests and offline demos)."""
     with open(path, encoding="utf-8") as fh:
         return parse_scoreboard(json.load(fh), league)
+
+
+class FixtureSource:
+    """A DataSource that serves pre-loaded matches (offline/dev mode, no network)."""
+
+    def __init__(self, matches: list[Match]):
+        self.matches = list(matches)
+
+    async def scoreboard(self, league: str = "fifa.world", date: str | None = None) -> list[Match]:
+        return list(self.matches)

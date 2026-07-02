@@ -34,6 +34,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="ASCII-only output for --line.")
     p.add_argument("--demo-goal", action="store_true",
                    help="Fire a demo goal celebration shortly after launch (to preview it).")
+    p.add_argument("--demo", default=None, metavar="EVENT",
+                   choices=["goal", "yellow", "red", "sub", "kickoff", "ht", "ft"],
+                   help="Preview an animation shortly after launch: "
+                        "goal, yellow, red, sub, kickoff, ht, ft.")
+    p.add_argument("--fixture", default=None, metavar="PATH",
+                   help="Serve matches from a saved scoreboard JSON instead of the network "
+                        "(offline/dev mode, e.g. tests/fixtures/scoreboard.json).")
     p.add_argument("--version", action="version", version=f"fifatui {__version__}")
     return p
 
@@ -62,13 +69,21 @@ def _run_line(args) -> int:
 def _run_tui(args) -> int:
     from .tui.app import FifaApp
 
+    source = None
+    if args.fixture:
+        from .api.espn import FixtureSource, load_fixture
+
+        source = FixtureSource(load_fixture(args.fixture, args.league))
+
+    demo = args.demo or ("goal" if args.demo_goal else None)
     app = FifaApp(
         league=args.league,
         favorite=args.team,
         refresh=args.refresh,
         start_match=args.match,
         date=args.date,
-        demo_goal=args.demo_goal,
+        demo=demo,
+        source=source,
     )
     app.run()
     return 0

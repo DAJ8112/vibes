@@ -8,6 +8,7 @@ from textual.app import App
 
 from ..api.models import Match
 from ..api.source import DataSource
+from ..art import theme as stadium
 from .screens.matchlist import MatchListScreen
 from .screens.watch import WatchScreen
 
@@ -27,6 +28,7 @@ class FifaApp(App):
         refresh: float = 15.0,
         start_match: str | None = None,
         date: str | None = None,
+        demo: str | None = None,
         demo_goal: bool = False,
         source: DataSource | None = None,
     ):
@@ -36,7 +38,7 @@ class FifaApp(App):
         self.refresh_interval = max(5.0, refresh)
         self.start_match = start_match
         self.date = date
-        self.demo_goal = demo_goal
+        self.demo = demo or ("goal" if demo_goal else None)
 
         if source is None:
             from ..api.espn import ESPNSource
@@ -51,7 +53,13 @@ class FifaApp(App):
         self._first_load = True
         self._polling = False
 
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        # Keeps styles.tcss parseable even before the stadium theme is active.
+        return dict(stadium.THEME_VARIABLES)
+
     def on_mount(self) -> None:
+        self.register_theme(stadium.build_theme())
+        self.theme = "stadium"
         self.push_screen(MatchListScreen())
         self.run_worker(self.refresh_data(), exclusive=False)
         self.set_interval(self.refresh_interval, self._scheduled_poll)
@@ -88,13 +96,12 @@ class FifaApp(App):
         target: Match | None = None
         if self.start_match:
             target = self.match_by_id(self.start_match) or self.find_match(self.start_match)
-        elif self.demo_goal:
+        elif self.demo:
             target = next((m for m in self.matches if m.is_live), None) or (
                 self.matches[0] if self.matches else None
             )
         if target is not None:
-            demo = self.demo_goal and not self.start_match
-            self.open_match(target.id, demo=demo)
+            self.open_match(target.id, demo=self.demo)
 
     def match_by_id(self, match_id: str) -> Match | None:
         return next((m for m in self.matches if m.id == match_id), None)
@@ -107,7 +114,7 @@ class FifaApp(App):
                 return m
         return None
 
-    def open_match(self, match_id: str, demo: bool = False) -> None:
+    def open_match(self, match_id: str, demo: str | None = None) -> None:
         if isinstance(self.screen, WatchScreen) and self.screen.match_id == match_id:
             return
         self.push_screen(WatchScreen(match_id, demo=demo))
