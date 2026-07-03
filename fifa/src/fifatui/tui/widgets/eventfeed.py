@@ -24,9 +24,11 @@ class EventFeed(VerticalScroll):
         self.query_one("#event-list", Static).update(self._build(m))
 
     def _build(self, m: Match):
-        if not m.events:
+        # Shootout kicks live in the ShootoutPanel, not the feed.
+        events = [e for e in m.events if e.type != EventType.SHOOTOUT]
+        if not events:
             return Text("No events yet.", style=theme.TEXT_DIM)
-        rows = [self._line(m, e) for e in reversed(m.events)]
+        rows = [self._line(m, e) for e in reversed(events)]
         return Group(*rows)
 
     @staticmethod
@@ -57,8 +59,6 @@ class EventFeed(VerticalScroll):
             t.append(e.scorer or "Yellow card", style=theme.CARD_YELLOW)
         elif e.type == EventType.RED:
             t.append(e.scorer or "Red card", style=f"bold {theme.CARD_RED}")
-        elif e.type == EventType.SHOOTOUT:
-            t.append(f"{e.text}: {e.scorer}".strip(": "), style=theme.AMBER_DIM)
         else:
             t.append(e.scorer or e.text, style=theme.TEXT_DIM)
         return t

@@ -12,10 +12,19 @@ from textual.widgets import Footer, Static
 from ...api.models import CELEBRATION_TYPES, EventType, Match, MatchEvent, MatchState
 from ...art import theme
 from ..anim import FrameAnimator
-from ..widgets import EventFeed, GoalCelebration, ScoreBoard, StatBars
+from ..widgets import EventFeed, GoalCelebration, ScoreBoard, ShootoutPanel, StatBars
 from ..widgets.banner import EventBanner
 from ..widgets.pixelscore import PixelScore
 from ..widgets.ticker import ScoreTicker
+
+#: Scripted shootout for --demo pens: (side, scored, taker). Home wins 4-3.
+_DEMO_KICKS = [
+    ("home", True, "Demo Taker 1"), ("away", True, "Demo Taker 2"),
+    ("home", False, "Demo Taker 3"), ("away", True, "Demo Taker 4"),
+    ("home", True, "Demo Taker 5"), ("away", False, "Demo Taker 6"),
+    ("home", True, "Demo Taker 7"), ("away", True, "Demo Taker 8"),
+    ("home", True, "Demo Taker 9"), ("away", False, "Demo Taker 10"),
+]
 
 
 class WatchScreen(Screen):
@@ -36,11 +45,14 @@ class WatchScreen(Screen):
         self._breath = FrameAnimator(self)
         self._last_state: MatchState | None = None
         self._last_status: str | None = None
+        self._demo_queue: list[tuple[str, bool, str]] = []
+        self._demo_timer = None
 
     def compose(self) -> ComposeResult:
         yield Static(id="topbar")
         yield Static(id="statusbar")
         yield ScoreBoard()
+        yield ShootoutPanel()
         yield StatBars()
         yield EventFeed()
         yield ScoreTicker()
@@ -55,6 +67,8 @@ class WatchScreen(Screen):
 
     def on_unmount(self) -> None:
         self._breath.stop()
+        if self._demo_timer is not None:
+            self._demo_timer.stop()
 
     def _run_demo(self) -> None:
         kind = self.demo
@@ -72,6 +86,8 @@ class WatchScreen(Screen):
                                players=["Demo On", "Demo Off"], text="Substitution")
             if m is not None:
                 banner.show_line(self._sub_line(m, event))
+        elif kind == "pens":
+            self._demo_pens()
         elif kind == "kickoff":
             banner.show_pixel("KICK OFF")
         elif kind == "ht":
@@ -88,6 +104,7 @@ class WatchScreen(Screen):
 
         new_events = self._detect_new_events(m)
         self.query_one(ScoreBoard).update_match(m)
+        self.query_one(ShootoutPanel).update_match(m)
         self.query_one(StatBars).update_match(m)
         self.query_one(EventFeed).update_match(m)
         self.query_one(ScoreTicker).update_matches(self.app.matches, exclude_id=self.match_id)
@@ -186,6 +203,42 @@ class WatchScreen(Screen):
         )
         self.query_one(PixelScore).animate_goal("home")
         self._celebrate(event, team)
+
+    def _demo_pens(self) -> None:
+        m = self.app.match_by_id(self.match_id)
+        if m is None:
+            return
+        if m.home.shootout_score is None:
+            m.home.shootout_score = 0
+        if m.away.shootout_score is None:
+            m.away.shootout_score = 0
+        self._demo_queue = list(_DEMO_KICKS)
+        self._demo_timer = self.set_interval(1.2, self._demo_pens_tick)
+
+    def _demo_pens_tick(self) -> None:
+        m = self.app.match_by_id(self.match_id)
+        if m is None or not self._demo_queue:
+            if self._demo_timer is not None:
+                self._demo_timer.stop()
+            return
+        side, scored, taker = self._demo_queue.pop(0)
+        team = m.home if side == "home" else m.away
+        event = MatchEvent(
+            type=EventType.SHOOTOUT,
+            minute="120'",
+            clock_value=7200.0,
+            team_id=team.id,
+            players=[taker],
+            text="Penalty - Scored" if scored else "Penalty - Missed",
+        )
+        m.events.append(event)
+        self._seen_keys.add(event.key)  # keep _detect_new_events from replaying it
+        if scored:
+            team.shootout_score = (team.shootout_score or 0) + 1
+        self.query_one(ShootoutPanel).update_match(m)
+        self.query_one(ScoreBoard).update_match(m)
+        if not self._demo_queue and self._demo_timer is not None:
+            self._demo_timer.stop()
 
     def _update_topbar(self, m: Match) -> None:
         league = "FIFA World Cup 2026" if m.league == "fifa.world" else m.league

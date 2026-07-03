@@ -35,9 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--demo-goal", action="store_true",
                    help="Fire a demo goal celebration shortly after launch (to preview it).")
     p.add_argument("--demo", default=None, metavar="EVENT",
-                   choices=["goal", "yellow", "red", "sub", "kickoff", "ht", "ft"],
+                   choices=["goal", "yellow", "red", "sub", "kickoff", "ht", "ft", "pens"],
                    help="Preview an animation shortly after launch: "
-                        "goal, yellow, red, sub, kickoff, ht, ft.")
+                        "goal, yellow, red, sub, kickoff, ht, ft, pens.")
     p.add_argument("--fixture", default=None, metavar="PATH",
                    help="Serve matches from a saved scoreboard JSON instead of the network "
                         "(offline/dev mode, e.g. tests/fixtures/scoreboard.json).")

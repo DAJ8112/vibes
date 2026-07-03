@@ -82,6 +82,13 @@ ScoreBoard {
     color: $amber-dim;
 }
 
+/* ---- Penalty shootout tracker ---- */
+ShootoutPanel {
+    display: none;
+    height: auto;
+    padding: 1 4 0 4;
+}
+
 StatBars {
     height: auto;
     padding: 1 4;
