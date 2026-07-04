@@ -41,6 +41,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fixture", default=None, metavar="PATH",
                    help="Serve matches from a saved scoreboard JSON instead of the network "
                         "(offline/dev mode, e.g. tests/fixtures/scoreboard.json).")
+    p.add_argument("--summary-fixture", default=None, metavar="PATH",
+                   help="Serve match detail (lineups/commentary/stats) from a saved summary "
+                        "JSON for the console commands (used with --fixture).")
     p.add_argument("--version", action="version", version=f"fifatui {__version__}")
     return p
 
@@ -71,9 +74,10 @@ def _run_tui(args) -> int:
 
     source = None
     if args.fixture:
-        from .api.espn import FixtureSource, load_fixture
+        from .api.espn import FixtureSource, load_fixture, load_summary_fixture
 
-        source = FixtureSource(load_fixture(args.fixture, args.league))
+        extras = load_summary_fixture(args.summary_fixture) if args.summary_fixture else None
+        source = FixtureSource(load_fixture(args.fixture, args.league), extras=extras)
 
     demo = args.demo or ("goal" if args.demo_goal else None)
     app = FifaApp(

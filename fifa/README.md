@@ -4,10 +4,11 @@ A **live football score tracker for your terminal** — with visuals, not just `
 
 Built for the **FIFA World Cup 2026** (works for any ESPN soccer league). Two ways to use it:
 
-- **`fifa`** — a full-screen TUI styled like an **LED stadium scoreboard**: pick a match
-  and watch it live with a chunky pixel-font score tinted in team colours, pixel-art team
-  flags, possession & stat bars, an event feed, a bottom ticker with the other live scores,
-  and animations for the big moments — **pixel fireworks** when someone scores, plus
+- **`fifa`** — a full-screen TUI styled like a **broadcast match console**: a bordered
+  scoreboard with a chunky pixel-font score tinted in team colours and pixel-art flags,
+  a pinned side column of key events + comparison stat bars, and an **interactive command
+  console** you type into (`stats`, `lineups`, `commentary`, `where`, `pin possession`, …).
+  The big moments still play as overlays — **pixel fireworks** when someone scores, plus
   kickoff / half-time / full-time / card / substitution banners.
 - **`fifa --line`** — one compact status line for your **tmux bar, shell prompt, or
   Claude Code statusline**, so you can keep an eye on the score while you work.
@@ -44,8 +45,24 @@ fifa --line               # print one status line and exit
 
 For offline visual tinkering, `fifa --fixture tests/fixtures/scoreboard.json` runs the
 full TUI against a saved scoreboard instead of the network (combine with `--demo …`).
+Add `--summary-fixture tests/fixtures/summary.json` to feed the console's `lineups` /
+`commentary` / `stats` / `where` commands offline too.
 
-**Keys in the TUI:** `↵` open match · `r` refresh · `esc`/`←` back · `q` quit.
+**Match list keys:** `↵` open match · `r` refresh · `q` quit.
+
+**Watch screen** is *input-first* — the console is always focused, so just type. `esc`
+returns to the match list; everything else is a console command:
+
+| command | what it does |
+| --- | --- |
+| `menu` | list all commands |
+| `where` | venue map — an ASCII globe with the stadium marked + facts |
+| `stats` | full match stat breakdown (possession, shots, passes, …) |
+| `events` | full goal & card feed |
+| `lineups` | starting XIs & formations |
+| `commentary` | live text commentary |
+| `pin <metric>` | pin a stat (possession/shots/ontarget/corners/fouls) to the side panel |
+| `refresh` · `back` · `clear` · `quit` | poll now · return to list · clear output · exit |
 
 ## Statusline integration
 
@@ -72,8 +89,10 @@ and can change, so all data is normalized behind a small `DataSource` protocol
 (`fifatui/api/source.py`) — swapping in a paid provider (football-data.org, API-Football)
 later means writing one new source class, not touching the UI.
 
-A single `scoreboard` request per poll provides everything: live clock, score, penalty
-shootout, possession / shots / corners / fouls, and the goal & card feed with player names.
+A single `scoreboard` request per poll drives the always-on view: live clock, score,
+penalty shootout, possession / shots / corners / fouls, and the goal & card feed with
+player names. The console's `lineups` / `commentary` / `stats` / `where` commands fetch
+ESPN's richer `summary` endpoint on demand (cached briefly), so idle polling stays light.
 
 ## Development
 
@@ -87,6 +106,7 @@ The TUI tests drive the real app headless via Textual's `run_test()` pilot.
 
 ## Roadmap
 
-v1 keeps the visuals focused: live info + the goal celebration. Natural next steps:
-ASCII pitch with momentum, stat "tug-of-war" history, lineups & substitutions and live
-commentary (ESPN's `summary` endpoint), group standings / bracket views, and more leagues.
+The match screen now pairs the live scoreboard with an interactive console (lineups,
+commentary, full stats, venue map, pinnable stat bars). Natural next steps: an ASCII
+pitch with momentum, stat "tug-of-war" history, substitution timelines, group standings
+/ bracket views, and more leagues.

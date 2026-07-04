@@ -59,7 +59,7 @@ class FifaApp(App):
 
     def on_mount(self) -> None:
         self.register_theme(stadium.build_theme())
-        self.theme = "stadium"
+        self.theme = "broadcast"
         self.push_screen(MatchListScreen())
         self.run_worker(self.refresh_data(), exclusive=False)
         self.set_interval(self.refresh_interval, self._scheduled_poll)

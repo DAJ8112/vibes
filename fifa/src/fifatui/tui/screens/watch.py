@@ -1,4 +1,9 @@
-"""Watch view: live scoreboard, stats, event feed, and goal celebrations for one match."""
+"""Watch view: scoreboard + pinned side panel + interactive console for one match.
+
+Layout mirrors the broadcast redesign: a bordered scoreboard on top, a pinned
+key-events/stats column bottom-left, and a REPL-style command console bottom-right.
+Goal celebrations and event banners still play as full-screen / lower-third overlays.
+"""
 
 from __future__ import annotations
 
@@ -6,16 +11,33 @@ import time
 
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal
 from textual.screen import Screen
-from textual.widgets import Footer, Static
 
-from ...api.models import CELEBRATION_TYPES, EventType, Match, MatchEvent, MatchState
+from ...api.models import (
+    CELEBRATION_TYPES,
+    EventType,
+    Match,
+    MatchEvent,
+    MatchExtras,
+    MatchState,
+)
 from ...art import theme
 from ..anim import FrameAnimator
-from ..widgets import EventFeed, GoalCelebration, ScoreBoard, ShootoutPanel, StatBars
-from ..widgets.banner import EventBanner
+from ..widgets import (
+    ConsolePanel,
+    EventBanner,
+    GoalCelebration,
+    ScoreBoard,
+    ShootoutPanel,
+    SidePanel,
+)
 from ..widgets.pixelscore import PixelScore
 from ..widgets.ticker import ScoreTicker
+
+#: How long a fetched summary stays fresh before the console re-fetches it.
+_EXTRAS_TTL = 30.0
 
 #: Scripted shootout for --demo pens: (side, scored, taker). Home wins 4-3.
 _DEMO_KICKS = [
@@ -29,10 +51,7 @@ _DEMO_KICKS = [
 
 class WatchScreen(Screen):
     BINDINGS = [
-        ("escape", "back", "Back"),
-        ("left", "back", "Back"),
-        ("r", "refresh", "Refresh"),
-        ("q", "quit", "Quit"),
+        Binding("escape", "back", "Back", priority=True),
     ]
 
     def __init__(self, match_id: str, demo: str | None = None):
@@ -47,23 +66,33 @@ class WatchScreen(Screen):
         self._last_status: str | None = None
         self._demo_queue: list[tuple[str, bool, str]] = []
         self._demo_timer = None
+        self._pinned = "possession"
+        self._extras: MatchExtras | None = None
+        self._extras_ts = 0.0
 
     def compose(self) -> ComposeResult:
-        yield Static(id="topbar")
-        yield Static(id="statusbar")
         yield ScoreBoard()
-        yield ShootoutPanel()
-        yield StatBars()
-        yield EventFeed()
+        with Horizontal(id="watch-bottom"):
+            yield SidePanel()
+            yield ConsolePanel()
         yield ScoreTicker()
         yield EventBanner()
         yield GoalCelebration()
-        yield Footer()
 
     def on_mount(self) -> None:
+        console = self.query_one(ConsolePanel)
+        console.bind_host(self)
         self.on_data_refresh()
+        console.welcome(self.app.match_by_id(self.match_id))
+        console.focus_input()
         if self.demo:
             self.set_timer(1.5, self._run_demo)
+
+    def on_screen_resume(self) -> None:
+        try:
+            self.query_one(ConsolePanel).focus_input()
+        except Exception:
+            pass
 
     def on_unmount(self) -> None:
         self._breath.stop()
@@ -99,17 +128,14 @@ class WatchScreen(Screen):
     def on_data_refresh(self) -> None:
         m = self.app.match_by_id(self.match_id)
         if m is None:
-            self._update_status(None)
+            self._update_board_header(None)
             return
 
         new_events = self._detect_new_events(m)
         self.query_one(ScoreBoard).update_match(m)
-        self.query_one(ShootoutPanel).update_match(m)
-        self.query_one(StatBars).update_match(m)
-        self.query_one(EventFeed).update_match(m)
+        self.query_one(SidePanel).update_match(m, pinned=self._pinned)
         self.query_one(ScoreTicker).update_matches(self.app.matches, exclude_id=self.match_id)
-        self._update_topbar(m)
-        self._update_status(m)
+        self._update_board_header(m)
 
         if m.is_live and not self._breath.running:
             self._breath.start(2, self._breathe)
@@ -122,6 +148,7 @@ class WatchScreen(Screen):
     def _breathe(self, elapsed: float) -> bool:
         if self.is_current and self.app.app_focus:
             self.query_one(ScoreBoard).pulse(int(elapsed * 2))
+            self._update_board_header(self.app.match_by_id(self.match_id))
         return True
 
     def _detect_new_events(self, m: Match) -> list[MatchEvent]:
@@ -158,16 +185,16 @@ class WatchScreen(Screen):
     def _sub_line(m: Match, e: MatchEvent) -> Text:
         team = m.team(e.team_id)
         line = Text()
-        line.append("⇄  ", style=f"bold {theme.AMBER}")
+        line.append("⇄  ", style=f"bold {theme.ACCENT}")
         if team is not None:
             line.append(f"{team.abbr}  ", style=f"bold {team.color_hex}")
         if len(e.players) > 1:
-            line.append(f"ON {e.players[0]}", style=theme.AMBER)
-            line.append(f"   OFF {e.players[1]}", style=theme.TEXT_DIM)
+            line.append(f"ON {e.players[0]}", style=theme.FG)
+            line.append(f"   OFF {e.players[1]}", style=theme.DIM)
         else:
-            line.append(e.scorer or e.text or "Substitution", style=theme.AMBER)
+            line.append(e.scorer or e.text or "Substitution", style=theme.FG)
         if e.minute:
-            line.append(f"   {e.minute}", style=theme.AMBER_DIM)
+            line.append(f"   {e.minute}", style=theme.DIM)
         return line
 
     def _detect_transitions(self, m: Match) -> None:
@@ -240,36 +267,70 @@ class WatchScreen(Screen):
         if not self._demo_queue and self._demo_timer is not None:
             self._demo_timer.stop()
 
-    def _update_topbar(self, m: Match) -> None:
-        league = "FIFA World Cup 2026" if m.league == "fifa.world" else m.league
-        top = Text()
-        top.append("◉ ", style=theme.AMBER)
-        top.append(league.upper(), style=f"bold {theme.AMBER}")
-        bits = []
-        if m.note:
-            bits.append(m.note)
-        venue = " · ".join(p for p in (m.venue, m.venue_city) if p)
-        if venue:
-            bits.append(venue)
-        if bits:
-            top.append("   " + "   ".join(bits), style=theme.AMBER_DIM)
-        self.query_one("#topbar", Static).update(top)
+    def _update_board_header(self, m: Match | None) -> None:
+        board = self.query_one(ScoreBoard)
+        league = "FIFA World Cup 2026" if self.app.league == "fifa.world" else self.app.league
+        left = Text()
+        left.append("◉ ", style=theme.ACCENT)
+        left.append(league.upper(), style=f"bold {theme.ACCENT}")
+        if m is not None:
+            for bit in (m.note, m.venue, m.venue_city):
+                if bit:
+                    left.append("  ·  ", style=theme.UNLIT)
+                    left.append(bit, style=theme.DIM)
+        board.set_header(left, self._refresh_state(m))
 
-    def _update_status(self, m: Match | None) -> None:
+    def _refresh_state(self, m: Match | None) -> Text:
         app = self.app
-        if not app.connection_ok:
-            left = Text("▲ RECONNECTING", style=f"bold {theme.CARD_YELLOW}")
-        elif app.last_updated:
-            ago = max(0, int(time.time() - app.last_updated))
-            left = Text(f"● updated {ago}s ago", style=theme.AMBER_DIM)
-        else:
-            left = Text("loading…", style=theme.TEXT_DIM)
         if m is None:
-            left = Text("match not in today's list", style=theme.CARD_YELLOW)
-        line = Text()
-        line.append_text(left)
-        line.append("     esc back  ·  r refresh  ·  q quit", style=theme.TEXT_DIM)
-        self.query_one("#statusbar", Static).update(line)
+            return Text("match not in today's list", style=theme.WARN)
+        if not app.connection_ok:
+            return Text("▲ reconnecting", style=f"bold {theme.WARN}")
+        if app.last_updated:
+            ago = max(0, int(time.time() - app.last_updated))
+            return Text(f"updated {ago}s ago", style=theme.DIM)
+        return Text("loading…", style=theme.DIM)
+
+    # -- ConsoleHost interface -------------------------------------------
+
+    def current_match(self) -> Match | None:
+        return self.app.match_by_id(self.match_id)
+
+    def cached_extras(self) -> MatchExtras | None:
+        if self._extras is not None and (time.time() - self._extras_ts) < _EXTRAS_TTL:
+            return self._extras
+        return None
+
+    def request_extras(self, callback) -> None:
+        self.app.run_worker(self._fetch_extras(callback), exclusive=False)
+
+    async def _fetch_extras(self, callback) -> None:
+        extras: MatchExtras | None = None
+        summary = getattr(self.app.source, "summary", None)
+        if callable(summary):
+            try:
+                extras = await summary(self.app.league, self.match_id)
+            except Exception:
+                extras = None
+        if extras is not None:
+            self._extras = extras
+            self._extras_ts = time.time()
+        callback(extras if extras is not None else self._extras)
+
+    def pin_metric(self, key: str) -> None:
+        self._pinned = key
+        self.query_one(SidePanel).set_pinned(key)
+
+    def do_refresh(self) -> None:
+        self.action_refresh()
+
+    def go_back(self) -> None:
+        self.action_back()
+
+    def do_quit(self) -> None:
+        self.app.exit()
+
+    # -- actions ----------------------------------------------------------
 
     def action_back(self) -> None:
         self.app.pop_screen()

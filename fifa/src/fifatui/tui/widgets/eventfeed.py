@@ -11,7 +11,6 @@ from textual.widgets import Static
 from ...api.models import EventType, Match, MatchEvent
 from ...art import theme
 from ...art.glyphs import EVENT_GLYPH
-from ...art.pixelflags import team_chip
 
 _GOAL_TYPES = {EventType.GOAL, EventType.OWN_GOAL, EventType.PENALTY_GOAL}
 
@@ -35,30 +34,31 @@ class EventFeed(VerticalScroll):
     def _line(m: Match, e: MatchEvent) -> Text:
         team = m.team(e.team_id)
         abbr = team.abbr if team else "?"
-        team_hex = team.color_hex if team else theme.AMBER
+        team_hex = team.color_hex if team else theme.ACCENT
         glyph = EVENT_GLYPH.get(e.type, "·")
         glyph_style = {
-            EventType.YELLOW: theme.CARD_YELLOW,
+            EventType.YELLOW: theme.WARN,
             EventType.RED: theme.CARD_RED,
         }.get(e.type, team_hex)
 
         t = Text()
-        t.append(f"{e.minute:>7}  ", style=theme.AMBER_DIM)
+        t.append(f"{e.minute:>6} ", style=theme.DIM)
         t.append(f"{glyph} ", style=f"bold {glyph_style}")
-        t.append_text(team_chip(abbr, team_hex))
-        t.append("  ")
+        t.append(f"{abbr:<4}", style=f"bold {team_hex}")
 
         if e.type in _GOAL_TYPES:
             who = e.scorer or "Goal"
             extra = " (pen)" if e.type == EventType.PENALTY_GOAL else ""
             extra = " (o.g.)" if e.type == EventType.OWN_GOAL else extra
-            t.append(f"{who}{extra}", style=f"bold {team_hex}")
+            t.append(f"{who}{extra}", style=f"bold {theme.FG}")
             if e.assist:
-                t.append(f"  assist {e.assist}", style=theme.TEXT_DIM)
+                t.append(f"  assist {e.assist}", style=theme.DIM)
         elif e.type == EventType.YELLOW:
-            t.append(e.scorer or "Yellow card", style=theme.CARD_YELLOW)
+            t.append(e.scorer or "Yellow card", style=theme.FG)
+            t.append("  booked", style=theme.DIM)
         elif e.type == EventType.RED:
-            t.append(e.scorer or "Red card", style=f"bold {theme.CARD_RED}")
+            t.append(e.scorer or "Red card", style=f"bold {theme.FG}")
+            t.append("  sent off", style=theme.DIM)
         else:
-            t.append(e.scorer or e.text, style=theme.TEXT_DIM)
+            t.append(e.scorer or e.text, style=theme.FG)
         return t

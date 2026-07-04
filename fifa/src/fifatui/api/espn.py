@@ -15,9 +15,13 @@ import json
 import httpx
 
 from .models import (
+    CommentaryLine,
     EventType,
+    Lineup,
+    LineupPlayer,
     Match,
     MatchEvent,
+    MatchExtras,
     MatchState,
     Team,
     TeamStats,
@@ -148,6 +152,100 @@ def _parse_match(event: dict, league: str) -> Match | None:
     )
 
 
+# Curated boxscore stats for the console `stats` table: (ESPN name, label, suffix).
+_SUMMARY_STATS = [
+    ("possessionPct", "Possession", "%"),
+    ("totalShots", "Shots", ""),
+    ("shotsOnTarget", "On target", ""),
+    ("saves", "Saves", ""),
+    ("wonCorners", "Corners", ""),
+    ("foulsCommitted", "Fouls", ""),
+    ("offsides", "Offsides", ""),
+    ("accuratePasses", "Passes", ""),
+    ("totalTackles", "Tackles", ""),
+    ("interceptions", "Interceptions", ""),
+]
+
+
+def _stat_lookup(team: dict) -> dict[str, str]:
+    return {
+        s.get("name"): s.get("displayValue", "")
+        for s in team.get("statistics") or []
+        if s.get("name")
+    }
+
+
+def _fmt_stat(value: str, suffix: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        return "—"
+    if suffix and suffix not in value:
+        value += suffix
+    return value
+
+
+def _parse_lineup(roster: dict) -> Lineup:
+    starters = []
+    for p in roster.get("roster") or []:
+        if not p.get("starter"):
+            continue
+        athlete = p.get("athlete") or {}
+        position = p.get("position") or {}
+        starters.append(
+            LineupPlayer(
+                jersey=str(p.get("jersey", "") or ""),
+                name=athlete.get("displayName", "?"),
+                position=position.get("abbreviation", "") or "",
+            )
+        )
+    return Lineup(formation=str(roster.get("formation", "") or ""), starters=starters)
+
+
+def parse_summary(payload: dict) -> MatchExtras:
+    """Normalize a raw ESPN ``summary`` payload into MatchExtras (pure; testable)."""
+    extras = MatchExtras()
+
+    venue = payload.get("gameInfo", {}).get("venue") or {}
+    address = venue.get("address") or {}
+    extras.venue_name = venue.get("fullName", "")
+    extras.venue_city = address.get("city", "")
+    extras.venue_country = address.get("country", "")
+
+    rosters = payload.get("rosters") or []
+    for roster in rosters:
+        lineup = _parse_lineup(roster)
+        if roster.get("homeAway") == "home":
+            extras.home_lineup = lineup
+        elif roster.get("homeAway") == "away":
+            extras.away_lineup = lineup
+
+    teams = (payload.get("boxscore") or {}).get("teams") or []
+    home_team = next((t for t in teams if t.get("homeAway") == "home"), None)
+    away_team = next((t for t in teams if t.get("homeAway") == "away"), None)
+    if home_team and away_team:
+        home_stats = _stat_lookup(home_team)
+        away_stats = _stat_lookup(away_team)
+        for name, label, suffix in _SUMMARY_STATS:
+            if name not in home_stats and name not in away_stats:
+                continue
+            extras.stat_rows.append((
+                label,
+                _fmt_stat(home_stats.get(name, ""), suffix),
+                _fmt_stat(away_stats.get(name, ""), suffix),
+            ))
+
+    for c in payload.get("commentary") or []:
+        text = (c.get("text") or "").strip()
+        if not text:
+            continue
+        clock = c.get("time") or {}
+        extras.commentary.append(
+            CommentaryLine(minute=clock.get("displayValue", ""), text=text)
+        )
+
+    return extras
+
+
 def parse_scoreboard(payload: dict, league: str) -> list[Match]:
     """Normalize a raw ESPN scoreboard payload into Match objects (pure; testable)."""
     matches = []
@@ -182,6 +280,12 @@ class ESPNSource:
         resp.raise_for_status()
         return parse_scoreboard(resp.json(), league)
 
+    async def summary(self, league: str, match_id: str) -> MatchExtras | None:
+        client = await self._get_client()
+        resp = await client.get(f"{BASE}/{league}/summary", params={"event": match_id})
+        resp.raise_for_status()
+        return parse_summary(resp.json())
+
     async def aclose(self) -> None:
         if self._own_client and self._client is not None:
             await self._client.aclose()
@@ -194,11 +298,25 @@ def load_fixture(path: str, league: str = "fifa.world") -> list[Match]:
         return parse_scoreboard(json.load(fh), league)
 
 
-class FixtureSource:
-    """A DataSource that serves pre-loaded matches (offline/dev mode, no network)."""
+def load_summary_fixture(path: str) -> MatchExtras:
+    """Parse a saved summary JSON file (offline dev of the console commands)."""
+    with open(path, encoding="utf-8") as fh:
+        return parse_summary(json.load(fh))
 
-    def __init__(self, matches: list[Match]):
+
+class FixtureSource:
+    """A DataSource that serves pre-loaded matches (offline/dev mode, no network).
+
+    An optional ``extras`` MatchExtras is returned for every ``summary`` call, so
+    the console commands can be exercised offline against a saved summary payload.
+    """
+
+    def __init__(self, matches: list[Match], extras: MatchExtras | None = None):
         self.matches = list(matches)
+        self.extras = extras
 
     async def scoreboard(self, league: str = "fifa.world", date: str | None = None) -> list[Match]:
         return list(self.matches)
+
+    async def summary(self, league: str, match_id: str) -> MatchExtras | None:
+        return self.extras

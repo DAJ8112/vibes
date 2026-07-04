@@ -104,6 +104,43 @@ class MatchEvent:
 
 
 @dataclass
+class LineupPlayer:
+    jersey: str
+    name: str
+    position: str = ""  # "G", "D", "M", "F" when known
+
+
+@dataclass
+class Lineup:
+    formation: str = ""
+    starters: list[LineupPlayer] = field(default_factory=list)
+
+
+@dataclass
+class CommentaryLine:
+    minute: str  # display clock, e.g. "58'" ("" for pre-match notes)
+    text: str
+
+
+@dataclass
+class MatchExtras:
+    """Richer per-match detail from ESPN's ``summary`` endpoint (fetched on demand).
+
+    Everything the console's ``lineups`` / ``commentary`` / ``stats`` / ``where``
+    commands need beyond the always-polled scoreboard.
+    """
+
+    venue_name: str = ""
+    venue_city: str = ""
+    venue_country: str = ""
+    home_lineup: Lineup = field(default_factory=Lineup)
+    away_lineup: Lineup = field(default_factory=Lineup)
+    commentary: list[CommentaryLine] = field(default_factory=list)  # oldest first
+    #: Full boxscore comparison table, ordered: (label, home_display, away_display).
+    stat_rows: list[tuple[str, str, str]] = field(default_factory=list)
+
+
+@dataclass
 class Match:
     id: str
     name: str

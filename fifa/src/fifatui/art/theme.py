@@ -1,24 +1,37 @@
-"""The "stadium" palette: one physical metaphor — an LED scoreboard at night.
+"""The "broadcast" palette: a dark broadcast-console look for the match screen.
 
-Near-black warm background, amber LEDs for chrome, team colours for team content,
-and a faint "unlit dot" tone so surfaces feel like a physical board. Every colour
-in the TUI comes from here.
+One metaphor — a live TV match console at night: near-black navy background, cyan
+accents for chrome, team colours for team content, and a faint "unlit" tone so
+surfaces feel like a physical board. Every colour in the TUI comes from here.
 """
 
 from __future__ import annotations
 
 import math
 
-BG = "#0b0a07"           # the board itself, switched off
-BG_PANEL = "#141109"     # chrome bars (title/status)
-UNLIT = "#2a2314"        # LEDs that exist but aren't lit
-AMBER = "#ffb52e"        # the primary LED
-AMBER_DIM = "#8a6418"    # secondary LED: labels, hints
-LIVE_RED = "#ff4b3e"     # the LIVE lamp
-CARD_YELLOW = "#ffd23e"
-CARD_RED = "#ff3b30"
-WIN_GOLD = "#ffd700"
-TEXT_DIM = "#6e6350"     # muted prose (venue, assists)
+# ---- broadcast palette -------------------------------------------------------
+BG = "#0a0e14"           # the console background
+PANEL = "#0d131c"        # chrome bars / prompt row / pinned surfaces
+BORDER = "#20304a"       # panel borders and rules
+UNLIT = "#182534"        # LEDs / marks that exist but aren't lit
+ACCENT = "#22d3ee"       # primary accent (cyan): headers, prompt, chrome
+ACCENT2 = "#38bdf8"      # secondary accent (sky): command names, links
+DIM = "#5a6c86"          # secondary text: labels, hints, timestamps
+FG = "#e2e8f0"           # primary foreground text
+LIVE = "#f43f5e"         # the LIVE lamp / error marks
+WARN = "#fbbf24"         # yellow cards, cautions
+CARD_RED = "#f43f5e"     # red cards (shares the live rose)
+WIN_GOLD = "#ffd700"     # winner star
+TEXT_DIM = "#3f4c63"     # muted prose (venue, assists) — darker than DIM
+
+# ---- backwards-compatible aliases -------------------------------------------
+# The board metaphor changed from an amber LED sign to a broadcast console; these
+# keep older widgets readable without a churny rename. Prefer the names above.
+AMBER = ACCENT
+AMBER_DIM = DIM
+LIVE_RED = LIVE
+CARD_YELLOW = WARN
+BG_PANEL = PANEL
 
 
 def _parse(hex_color: str) -> tuple[int, int, int]:
@@ -38,19 +51,25 @@ def fade(hex_color: str, t: float, to: str = BG) -> str:
     )
 
 
-#: Breathing ramp for the LIVE lamp: a slow sine between bright and dimmed red.
+#: Breathing ramp for the LIVE lamp: a slow sine between bright and dimmed rose.
 LIVE_PULSE = [
-    fade(LIVE_RED, 0.55 * (0.5 - 0.5 * math.cos(2 * math.pi * i / 8)))
+    fade(LIVE, 0.55 * (0.5 - 0.5 * math.cos(2 * math.pi * i / 8)))
     for i in range(8)
 ]
 
 #: Custom variables exposed to styles.tcss (via the theme *and* as defaults, so
-#: the stylesheet parses even before the stadium theme is activated).
+#: the stylesheet parses even before the broadcast theme is activated).
 THEME_VARIABLES = {
-    "amber": AMBER,
-    "amber-dim": AMBER_DIM,
+    "accent": ACCENT,
+    "accent2": ACCENT2,
+    "dim": DIM,
+    "fg": FG,
+    "border": BORDER,
     "unlit": UNLIT,
-    "live": LIVE_RED,
+    "live": LIVE,
+    # legacy names kept so any un-migrated rule still resolves.
+    "amber": ACCENT,
+    "amber-dim": DIM,
 }
 
 
@@ -59,17 +78,17 @@ def build_theme():
     from textual.theme import Theme
 
     return Theme(
-        name="stadium",
-        primary=AMBER,
-        secondary=AMBER_DIM,
-        accent=AMBER,
-        foreground="#e8ddc0",
+        name="broadcast",
+        primary=ACCENT,
+        secondary=DIM,
+        accent=ACCENT2,
+        foreground=FG,
         background=BG,
         surface=BG,
-        panel=BG_PANEL,
-        warning=CARD_YELLOW,
+        panel=PANEL,
+        warning=WARN,
         error=CARD_RED,
-        success="#7dc95e",
+        success="#4ade80",
         dark=True,
         variables=THEME_VARIABLES,
     )
