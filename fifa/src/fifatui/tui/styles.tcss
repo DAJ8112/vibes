@@ -46,7 +46,7 @@ Footer {
 /* ---- Watch view: scoreboard (top 40%) ---- */
 ScoreBoard {
     height: 40%;
-    min-height: 12;
+    min-height: 17;
     border: solid $border;
     padding: 0 2;
 }

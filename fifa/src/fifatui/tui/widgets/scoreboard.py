@@ -65,7 +65,7 @@ class ScoreBoard(Vertical):
         if team.winner:
             t.append("  ★", style=f"bold {theme.WIN_GOLD}")
         t.append(f"\n{team.name}\n", style=theme.DIM)
-        for row in team_mark(team.abbr, color):
+        for row in team_mark(team.abbr, color, large=True):
             t.append_text(row)
             t.append("\n")
         return t
