@@ -7,11 +7,15 @@ these, so swapping the source never touches the TUI or statusline code.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 
 from ..colors import vivid_hex
 from ..flags import flag_for
+
+
+_MINUTE_RE = re.compile(r"^\d+'")  # a running minute clock, e.g. "72'"
 
 
 class MatchState(str, Enum):
@@ -148,7 +152,8 @@ class Match:
     state: MatchState
     status_detail: str  # "108'", "HT", "FT", "FT-Pens"
     status_name: str  # raw STATUS_* token
-    display_clock: str
+    display_clock: str  # minute-only clock, e.g. "72'" or "90'+3'"
+    clock_seconds: float  # numeric elapsed seconds, for M:SS display
     period: int
     home: Team
     away: Team
@@ -157,6 +162,22 @@ class Match:
     venue_city: str = ""
     note: str = ""  # group/round headline, e.g. "Paraguay advance 4-3 on penalties"
     date: str = ""  # ISO start time (UTC)
+
+    def clock_display(self, extra_seconds: float = 0.0) -> str:
+        """Match clock for the UI. While the clock is running (live, in a half)
+        show M:SS, advancing `extra_seconds` past the last poll's value but never
+        rolling into the next minute (ESPN reports the clock per whole minute, so
+        the true time is within [base, base+60) and we estimate the seconds
+        locally). Keep the source label for stoppage time ("90'+3'", where the
+        numeric clock is capped), breaks ("HT"), and any non-live state ("FT",
+        kickoff time)."""
+        detail = self.status_detail or self.display_clock
+        if self.state == MatchState.IN and _MINUTE_RE.match(detail) and "+" not in detail:
+            base = max(0, int(self.clock_seconds))
+            minute_cap = (base // 60) * 60 + 59
+            total = int(min(base + max(0.0, extra_seconds), minute_cap))
+            return f"{total // 60}:{total % 60:02d}"
+        return detail
 
     @property
     def is_live(self) -> bool:

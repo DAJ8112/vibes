@@ -146,7 +146,9 @@ class WatchScreen(Screen):
         self._detect_transitions(m)
 
     def _breathe(self, elapsed: float) -> bool:
-        if self.is_current and self.app.app_focus:
+        # Keep the clock + LIVE lamp animating whenever the match screen is
+        # visible, even if the terminal window isn't the OS-focused one.
+        if self.is_current:
             self.query_one(ScoreBoard).pulse(int(elapsed * 2))
             self._update_board_header(self.app.match_by_id(self.match_id))
         return True

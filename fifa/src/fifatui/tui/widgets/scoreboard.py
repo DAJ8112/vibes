@@ -3,6 +3,8 @@ digital score + live clock, a footer note, and (during pens) the shootout tracke
 
 from __future__ import annotations
 
+import time
+
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -28,9 +30,16 @@ class ScoreBoard(Vertical):
 
     def on_mount(self) -> None:
         self._match: Match | None = None
+        # Anchor the M:SS tick to when the *minute* last changed, not to each
+        # poll — ESPN reports a whole minute that holds steady between polls.
+        self._clock_base: float | None = None
+        self._clock_anchor = 0.0
 
     def update_match(self, m: Match) -> None:
         self._match = m
+        if m.clock_seconds != self._clock_base:
+            self._clock_base = m.clock_seconds
+            self._clock_anchor = time.monotonic()
         self.query_one("#home-panel", Static).update(self._panel(m.home))
         self.query_one("#away-panel", Static).update(self._panel(m.away))
         score = self.query_one("#score-digits", PixelScore)
@@ -70,13 +79,13 @@ class ScoreBoard(Vertical):
             t.append("\n")
         return t
 
-    @staticmethod
-    def _status(m: Match, phase: int = 0) -> Text:
+    def _status(self, m: Match, phase: int = 0) -> Text:
         if m.state == MatchState.IN:
             dot = theme.LIVE_PULSE[phase % len(theme.LIVE_PULSE)]
             t = Text()
             t.append("● ", style=f"bold {dot}")
-            t.append(m.status_detail or m.display_clock, style=f"bold {theme.FG}")
+            extra = time.monotonic() - self._clock_anchor
+            t.append(m.clock_display(extra), style=f"bold {theme.FG}")
             t.append("  ·  ", style=theme.DIM)
             t.append("LIVE", style=f"bold {theme.LIVE}")
             if m.has_shootout:

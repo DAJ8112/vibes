@@ -141,6 +141,7 @@ def _parse_match(event: dict, league: str) -> Match | None:
         status_detail=status.get("shortDetail") or status.get("detail", ""),
         status_name=status.get("name", ""),
         display_clock=(comp.get("status") or {}).get("displayClock", ""),
+        clock_seconds=_to_float((comp.get("status") or {}).get("clock")) or 0.0,
         period=_to_int((comp.get("status") or {}).get("period")),
         home=home,
         away=away,
