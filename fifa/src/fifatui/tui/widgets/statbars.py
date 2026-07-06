@@ -7,8 +7,6 @@ side-panel stat block.
 
 from __future__ import annotations
 
-import colorsys
-
 from rich.console import Group
 from rich.text import Text
 from textual.widgets import Static
@@ -17,8 +15,8 @@ from ...api.models import Match
 from ...art import theme
 
 BAR = "█"
-#: Textured fill for the away lane when both teams share a hue (e.g. two reds);
-#: keeps each team's real colour but makes the split readable via texture.
+#: Textured fill for the away lane, always used so the away side reads as distinct
+#: from the solid home lane (each keeps its real team colour).
 HATCH = "▒"
 
 #: (metric key, label, accessor) — the metrics shown, in order. Keys match the
@@ -33,31 +31,6 @@ _STATS = [
 
 #: Console pin key -> display label (for the panel header + `pin` feedback).
 STAT_LABELS = {key: label for key, label, _ in _STATS}
-
-#: Max hue separation (degrees) for two lane colours to read as the same colour.
-#: Manhattan RGB distance is the wrong metric here — a deep red and a lightened
-#: red are far apart in RGB yet the same hue, so we compare hue directly.
-_HUE_TOLERANCE = 30
-#: Below this HLS saturation a colour's hue is unreliable (near-grey); such lanes
-#: only "collide" with each other, not with a saturated colour.
-_DULL_SAT = 0.15
-
-
-def _hue_sat(hex_str: str) -> tuple[float, float]:
-    r, g, b = theme._parse(hex_str)
-    h, _l, s = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
-    return h * 360, s
-
-
-def _hue_collision(a: str, b: str) -> bool:
-    """True when two lane colours are too close in hue to tell apart in a split
-    bar (e.g. a deep red vs a lightened red)."""
-    ha, sa = _hue_sat(a)
-    hb, sb = _hue_sat(b)
-    if sa < _DULL_SAT or sb < _DULL_SAT:
-        return sa < _DULL_SAT and sb < _DULL_SAT
-    dh = abs(ha - hb) % 360
-    return min(dh, 360 - dh) < _HUE_TOLERANCE
 
 
 def _value_text(key: str, raw) -> str:
@@ -104,9 +77,9 @@ class StatBars(Static):
             return Text("No live stats yet.", style=theme.TEXT_DIM)
 
         hc, ac = m.home.color_hex, m.away.color_hex
-        # Same-hue teams (e.g. two reds) keep their colours but the away lane is
-        # hatched so the split stays readable.
-        away_glyph = HATCH if _hue_collision(hc, ac) else BAR
+        # The away lane is always hatched so it reads as distinct from the solid
+        # home lane; both keep their real team colours.
+        away_glyph = HATCH
         rows: list = []
         for key, label, fn in _STATS:
             rows.append(self._row(key, label, fn(hs), fn(as_), hc, ac))
