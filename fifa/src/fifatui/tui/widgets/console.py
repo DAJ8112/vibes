@@ -15,7 +15,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Input, RichLog, Static
 
-from ...api.models import EventType, Match, MatchExtras
+from ...api.models import EventType, Match, MatchExtras, CommentaryLine
 from ...art import globe, theme
 from ...art.glyphs import EVENT_GLYPH
 from ...venues import find_venue
@@ -32,7 +32,7 @@ _CMDS = [
     ("stats", "full match stat breakdown"),
     ("events", "full goal & card feed"),
     ("lineups", "starting XIs & formations"),
-    ("commentary", "live text commentary"),
+    ("commentary", "live text commentary — auto-updates; `commentary stop` to end"),
     ("pin <metric>", "pin a stat to the side panel"),
     ("refresh", "poll for fresh data now"),
     ("back", "return to the match list"),
@@ -63,7 +63,16 @@ class ConsolePanel(Vertical):
 
     def on_mount(self) -> None:
         self._host: "ConsoleHost" | None = None
+        self._comm_live = False
+        self._comm_seen: set[tuple[str, str]] = set()
+        self._comm_timer = None
         self.query_one("#output-header", Static).update(self._header())
+
+    def on_unmount(self) -> None:
+        # Leaving the watch screen ends any live commentary stream.
+        if self._comm_timer is not None:
+            self._comm_timer.stop()
+            self._comm_timer = None
 
     def bind_host(self, host: "ConsoleHost") -> None:
         self._host = host
@@ -105,6 +114,11 @@ class ConsolePanel(Vertical):
         cmd = parts[0].lower()
         arg = parts[1].lower() if len(parts) > 1 else ""
 
+        # Any command other than `commentary` ends a running live stream, so its
+        # lines don't interleave with the next command's output.
+        if self._comm_live and cmd not in ("commentary", "comm"):
+            self._stop_commentary_stream("paused")
+
         if cmd in ("clear", "cls"):
             self.query_one(RichLog).clear()
             return
@@ -124,7 +138,7 @@ class ConsolePanel(Vertical):
         elif cmd in ("lineups", "lineup", "xi"):
             self._with_extras(self._render_lineups)
         elif cmd in ("commentary", "comm"):
-            self._with_extras(self._render_commentary)
+            self._cmd_commentary(arg)
         elif cmd == "pin":
             self._emit(self._cmd_pin(arg))
         elif cmd == "refresh":
@@ -321,17 +335,110 @@ class ConsolePanel(Vertical):
             if written < pad_to:
                 t.append(" " * (pad_to - written))
 
-    def _render_commentary(self, extras: MatchExtras, limit: int = 14) -> list:
+    # -- live commentary stream ------------------------------------------
+
+    _COMM_BACKLOG = 14  # how many past lines to print when the stream starts
+
+    def _cmd_commentary(self, arg: str) -> None:
+        if arg in ("stop", "off", "end"):
+            if self._comm_live:
+                self._stop_commentary_stream("stopped")
+            else:
+                self._emit([Text("commentary is not streaming.", style=theme.DIM)])
+            return
+        if self._comm_live:
+            self._emit([Text("already streaming — `commentary stop` to end.", style=theme.DIM)])
+            return
+        self._start_commentary_stream()
+
+    def _start_commentary_stream(self) -> None:
+        host = self._host
+        if host is None:
+            self._emit([self._err("no data source")])
+            return
+        self._comm_seen = set()
+        cached = host.cached_extras()
+        if cached is not None:
+            self._emit_commentary_backlog(cached)
+            self._begin_comm_timer()
+            return
+        self._emit([Text("fetching commentary…", style=theme.DIM)])
+
+        def done(extras: MatchExtras | None) -> None:
+            if extras is None:
+                self._emit([self._err("commentary unavailable")])
+                self._spacer()
+                return
+            self._emit_commentary_backlog(extras)
+            self._begin_comm_timer()
+
+        host.request_extras(done)
+
+    def _begin_comm_timer(self) -> None:
+        self._comm_live = True
+        self._emit([Text("● streaming live — any command or `commentary stop` to end",
+                         style=theme.DIM)])
+        interval = getattr(self.app, "refresh_interval", 15.0)
+        self._comm_timer = self.set_interval(interval, self._comm_tick)
+
+    def _emit_commentary_backlog(self, extras: MatchExtras) -> None:
+        # Mark *all* current lines as seen (so ticks only ever add newer ones),
+        # but only print the recent tail. Oldest→newest, so live lines append
+        # naturally at the bottom of the scrollback.
+        self._comm_seen = {self._comm_key(c) for c in extras.commentary}
+        self._emit([self._head("LIVE COMMENTARY")])
         if not extras.commentary:
-            return [self._head("LIVE COMMENTARY"), Text("No commentary yet.", style=theme.DIM)]
-        rows = [self._head("LIVE COMMENTARY")]
-        for c in reversed(extras.commentary[-limit:]):
-            goal = c.text.lower().startswith("goal")
-            t = Text("  ")
-            t.append(f"{(c.minute or '·'):>6}  ", style=f"bold {theme.ACCENT2}")
-            t.append(c.text, style=f"bold {theme.WARN}" if goal else theme.FG)
-            rows.append(t)
-        return rows
+            self._emit([Text("No commentary yet — new lines stream in as they arrive.",
+                             style=theme.DIM)])
+            return
+        for c in extras.commentary[-self._COMM_BACKLOG:]:
+            self._emit([self._commentary_row(c)])
+
+    def _comm_tick(self) -> None:
+        if not self._comm_live or self._host is None:
+            return
+        self._host.request_extras(self._on_comm_extras)
+
+    def _on_comm_extras(self, extras: MatchExtras | None) -> None:
+        if not self._comm_live:
+            return
+        if extras is not None:
+            for c in extras.commentary:
+                key = self._comm_key(c)
+                if key in self._comm_seen:
+                    continue
+                self._comm_seen.add(key)
+                self._emit([self._commentary_row(c)])
+        # Once the match is over there's no more commentary coming — stop.
+        m = self._host.current_match() if self._host else None
+        if m is not None and m.is_finished:
+            self._stop_commentary_stream("fulltime")
+            self._spacer()
+
+    def _stop_commentary_stream(self, reason: str = "stopped") -> None:
+        if self._comm_timer is not None:
+            self._comm_timer.stop()
+            self._comm_timer = None
+        was_live = self._comm_live
+        self._comm_live = False
+        if was_live:
+            note = {
+                "paused": "— commentary paused",
+                "stopped": "— commentary stopped",
+                "fulltime": "— commentary ended · full time",
+            }.get(reason, "— commentary stopped")
+            self._emit([Text(note, style=theme.DIM)])
+
+    @staticmethod
+    def _comm_key(c: CommentaryLine) -> tuple[str, str]:
+        return (c.minute, c.text)
+
+    def _commentary_row(self, c: CommentaryLine) -> Text:
+        goal = c.text.lower().startswith("goal")
+        t = Text("  ")
+        t.append(f"{(c.minute or '·'):>6}  ", style=f"bold {theme.ACCENT2}")
+        t.append(c.text, style=f"bold {theme.WARN}" if goal else theme.FG)
+        return t
 
     def _cmd_where(self) -> None:
         host = self._host

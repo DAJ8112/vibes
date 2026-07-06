@@ -103,6 +103,44 @@ async def test_stats_command_uses_summary(fixture_source_full):
         assert "MATCH STATS" in text and "Possession" in text
 
 
+async def test_commentary_streams_and_stops(fixture_source_full):
+    app, _ = await _open(fixture_source_full)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause(0.3)
+        console = app.screen.query_one(ConsolePanel)
+        console.run_command("commentary")
+        await pilot.pause(0.3)  # allow the summary worker to resolve
+        assert "LIVE COMMENTARY" in _log_text(console)
+        assert console._comm_live is True
+        assert console._comm_timer is not None
+        # New lines can only ever be *newer* than the backlog already shown.
+        assert console._comm_seen
+
+        console.run_command("commentary stop")
+        await pilot.pause(0.1)
+        assert console._comm_live is False
+        assert console._comm_timer is None
+        assert "commentary stopped" in _log_text(console)
+
+
+async def test_commentary_paused_by_other_command(fixture_source_full):
+    app, _ = await _open(fixture_source_full)
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause(0.3)
+        console = app.screen.query_one(ConsolePanel)
+        console.run_command("commentary")
+        await pilot.pause(0.3)
+        assert console._comm_live is True
+
+        console.run_command("menu")  # any other command ends the stream
+        await pilot.pause(0.1)
+        assert console._comm_live is False
+        assert console._comm_timer is None
+        text = _log_text(console)
+        assert "commentary paused" in text
+        assert "AVAILABLE COMMANDS" in text
+
+
 async def test_back_command_pops_screen(fixture_source_full):
     app, _ = await _open(fixture_source_full)
     async with app.run_test(size=(120, 40)) as pilot:
