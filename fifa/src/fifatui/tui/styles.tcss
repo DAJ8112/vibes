@@ -67,6 +67,9 @@ ScoreBoard {
     width: auto;
     min-width: 18;
     content-align: center middle;
+    /* Drop the score to the flags' center: each team panel stacks 2 label rows
+       above its flag, so the flag center sits ~2.5 rows below the row midline. */
+    margin-top: 4;
     color: $accent;
 }
 #status-line {
