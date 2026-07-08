@@ -195,8 +195,8 @@ class Match:
             return f"{total // 60}:{total % 60:02d}"
         return detail
 
-    def kickoff_et(self) -> str:
-        """Kickoff 'HH:MM' in US Eastern, or '' if the date is unknown/unparseable.
+    def _et_dt(self) -> datetime | None:
+        """The kickoff as a US Eastern-aware datetime, or None if unparseable.
 
         ESPN dates are UTC with a fixed format (``2026-07-09T20:00Z``); strptime keeps
         the parse deterministic across Python versions (3.10 fromisoformat is fussy
@@ -207,8 +207,23 @@ class Match:
                 dt = datetime.strptime(self.date, fmt).replace(tzinfo=timezone.utc)
             except ValueError:
                 continue
-            return dt.astimezone(EASTERN).strftime("%H:%M")
-        return ""
+            return dt.astimezone(EASTERN)
+        return None
+
+    def kickoff_et(self) -> str:
+        """Kickoff 'HH:MM' in US Eastern, or '' if the date is unknown/unparseable."""
+        dt = self._et_dt()
+        return dt.strftime("%H:%M") if dt else ""
+
+    def et_day_key(self) -> str:
+        """Calendar day 'YYYYMMDD' in US Eastern — grouping/sort key, or '' if unknown."""
+        dt = self._et_dt()
+        return dt.strftime("%Y%m%d") if dt else ""
+
+    def et_day_label(self) -> str:
+        """Calendar day header 'THU 9 JUL' in US Eastern, or '' if unknown."""
+        dt = self._et_dt()
+        return f"{dt:%a} {dt.day} {dt:%b}".upper() if dt else ""
 
     @property
     def is_live(self) -> bool:

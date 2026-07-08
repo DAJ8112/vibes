@@ -13,6 +13,8 @@ from ..art import theme as stadium
 from .screens.matchlist import MatchListScreen
 from .screens.watch import WatchScreen
 
+UPCOMING_WINDOW_DAYS = 45  # how far ahead the "upcoming fixtures" list reaches
+
 
 class FifaApp(App):
     CSS_PATH = "styles.tcss"
@@ -39,6 +41,7 @@ class FifaApp(App):
         self.refresh_interval = max(5.0, refresh)
         self.start_match = start_match
         self.date = date
+        self.upcoming = False  # showing the forward date-range fixtures list
         self.demo = demo or ("goal" if demo_goal else None)
 
         if source is None:
@@ -73,7 +76,12 @@ class FifaApp(App):
             return
         self._polling = True
         try:
-            self.matches = await self.source.scoreboard(self.league, self.date or eastern_today())
+            if self.upcoming:
+                end = (datetime.now(EASTERN) + timedelta(days=UPCOMING_WINDOW_DAYS)).strftime("%Y%m%d")
+                param = f"{eastern_today()}-{end}"
+            else:
+                param = self.date or eastern_today()
+            self.matches = await self.source.scoreboard(self.league, param)
             self.connection_ok = True
             self.last_error = ""
             self.last_updated = time.time()
@@ -97,11 +105,17 @@ class FifaApp(App):
         return datetime.now(EASTERN)
 
     def shift_date(self, days: int) -> None:
+        self.upcoming = False
         self.date = (self._base_date() + timedelta(days=days)).strftime("%Y%m%d")
         self.run_worker(self.refresh_data())
 
     def goto_today(self) -> None:
+        self.upcoming = False
         self.date = None  # None => Eastern today (resolved in refresh_data)
+        self.run_worker(self.refresh_data())
+
+    def show_upcoming(self) -> None:
+        self.upcoming = True  # forward date range (resolved in refresh_data)
         self.run_worker(self.refresh_data())
 
     def _dispatch_refresh(self) -> None:
