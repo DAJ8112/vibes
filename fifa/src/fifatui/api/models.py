@@ -9,13 +9,29 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
+from zoneinfo import ZoneInfo
 
 from ..colors import vivid_hex
 from ..flags import flag_for
 
 
 _MINUTE_RE = re.compile(r"^\d+'")  # a running minute clock, e.g. "72'"
+
+# All match times display in US Eastern, labeled generically "ET" (avoids EST/EDT/DST
+# confusion). ESPN's raw dates are UTC (see Match.date).
+EASTERN = ZoneInfo("America/New_York")
+ET_LABEL = "ET"
+
+
+def eastern_today() -> str:
+    """Today's date (YYYYMMDD) in US Eastern — the 'today' anchor for ESPN.
+
+    ESPN's default scoreboard (no ``dates=``) jumps ahead to the next matchday, so we
+    always pass an explicit Eastern date instead of relying on the server default.
+    """
+    return datetime.now(EASTERN).strftime("%Y%m%d")
 
 
 class MatchState(str, Enum):
@@ -178,6 +194,21 @@ class Match:
             total = int(min(base + max(0.0, extra_seconds), minute_cap))
             return f"{total // 60}:{total % 60:02d}"
         return detail
+
+    def kickoff_et(self) -> str:
+        """Kickoff 'HH:MM' in US Eastern, or '' if the date is unknown/unparseable.
+
+        ESPN dates are UTC with a fixed format (``2026-07-09T20:00Z``); strptime keeps
+        the parse deterministic across Python versions (3.10 fromisoformat is fussy
+        about the ``Z`` suffix and missing seconds).
+        """
+        for fmt in ("%Y-%m-%dT%H:%MZ", "%Y-%m-%dT%H:%M:%SZ"):
+            try:
+                dt = datetime.strptime(self.date, fmt).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            return dt.astimezone(EASTERN).strftime("%H:%M")
+        return ""
 
     @property
     def is_live(self) -> bool:

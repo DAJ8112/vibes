@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from textual.app import App
 
-from ..api.models import Match
+from ..api.models import EASTERN, Match, eastern_today
 from ..api.source import DataSource
 from ..art import theme as stadium
 from .screens.matchlist import MatchListScreen
@@ -73,7 +73,7 @@ class FifaApp(App):
             return
         self._polling = True
         try:
-            self.matches = await self.source.scoreboard(self.league, self.date)
+            self.matches = await self.source.scoreboard(self.league, self.date or eastern_today())
             self.connection_ok = True
             self.last_error = ""
             self.last_updated = time.time()
@@ -94,14 +94,14 @@ class FifaApp(App):
                 return datetime.strptime(self.date, "%Y%m%d")
             except ValueError:
                 pass
-        return datetime.now()
+        return datetime.now(EASTERN)
 
     def shift_date(self, days: int) -> None:
         self.date = (self._base_date() + timedelta(days=days)).strftime("%Y%m%d")
         self.run_worker(self.refresh_data())
 
     def goto_today(self) -> None:
-        self.date = None  # None => ESPN default "today"
+        self.date = None  # None => Eastern today (resolved in refresh_data)
         self.run_worker(self.refresh_data())
 
     def _dispatch_refresh(self) -> None:

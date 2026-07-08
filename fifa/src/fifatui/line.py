@@ -70,10 +70,9 @@ def render_line(match: Match | None, goal_flash: bool = False, emoji: bool = Tru
         tag = match.status_detail or "FT"
         return f"{tag} {score}{_shootout_suffix(match)}"
 
-    # Pre-match: show kickoff time (HH:MM UTC) from ISO date when available.
-    when = ""
-    if "T" in match.date:
-        when = match.date.split("T", 1)[1].rstrip("Z")[:5]
+    # Pre-match: show kickoff time in US Eastern when available.
+    et = match.kickoff_et()
+    when = f"{et} ET" if et else ""
     clk = "⏱" if emoji else "@"
     return f"{clk} {h.abbr} v {a.abbr} {when}".rstrip()
 

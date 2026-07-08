@@ -50,12 +50,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _run_line(args) -> int:
     from .api.espn import ESPNSource
+    from .api.models import eastern_today
     from .line import oneline
 
     async def fetch():
         src = ESPNSource()
         try:
-            return await src.scoreboard(args.league, args.date)
+            return await src.scoreboard(args.league, args.date or eastern_today())
         finally:
             await src.aclose()
 

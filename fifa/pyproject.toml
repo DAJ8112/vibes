@@ -12,6 +12,7 @@ license = { text = "MIT" }
 dependencies = [
     "textual>=1.0",
     "httpx>=0.24",
+    "tzdata; platform_system == 'Windows'",
 ]
 
 [project.optional-dependencies]

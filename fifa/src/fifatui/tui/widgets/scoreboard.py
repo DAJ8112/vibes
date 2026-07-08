@@ -103,9 +103,8 @@ class ScoreBoard(Vertical):
                 )
             return t
         # upcoming
-        when = ""
-        if "T" in m.date:
-            when = m.date.split("T", 1)[1].rstrip("Z")[:5] + " UTC"
+        t = m.kickoff_et()
+        when = f"{t} ET" if t else ""
         return Text(f"Kickoff {when}".strip(), style=theme.DIM)
 
     @staticmethod
@@ -113,6 +112,6 @@ class ScoreBoard(Vertical):
         bits = []
         if m.note:
             bits.append(m.note)
-        if m.is_upcoming and "T" in m.date:
-            bits.append("kickoff " + m.date.split("T", 1)[1].rstrip("Z")[:5])
+        if m.is_upcoming and m.kickoff_et():
+            bits.append(f"kickoff {m.kickoff_et()} ET")
         return Text("   ·   ".join(bits), style=theme.DIM)

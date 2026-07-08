@@ -153,7 +153,7 @@ class MatchListScreen(Screen):
         line = Text()
         line.append_text(state)
         line.append(f"   {n_live} live · {len(app.matches)} {when}", style=theme.TEXT_DIM)
-        line.append("    ↵ open  ·  [ ] day  ·  t today  ·  r refresh  ·  q quit",
+        line.append("    times in ET  ·  ↵ open  ·  [ ] day  ·  t today  ·  r refresh  ·  q quit",
                     style=theme.TEXT_DIM)
         self.query_one("#list-status", Static).update(line)
 
@@ -230,9 +230,7 @@ class MatchListScreen(Screen):
 
     @staticmethod
     def _kickoff(m: Match) -> str:
-        if "T" in m.date:
-            return m.date.split("T", 1)[1].rstrip("Z")[:5]
-        return "—"
+        return m.kickoff_et() or "—"
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         if event.option_id is not None:
