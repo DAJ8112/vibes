@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timedelta
 
 from textual.app import App
 
@@ -86,6 +87,22 @@ class FifaApp(App):
         if self._first_load:
             self._first_load = False
             self._handle_autostart()
+
+    def _base_date(self) -> datetime:
+        if self.date:
+            try:
+                return datetime.strptime(self.date, "%Y%m%d")
+            except ValueError:
+                pass
+        return datetime.now()
+
+    def shift_date(self, days: int) -> None:
+        self.date = (self._base_date() + timedelta(days=days)).strftime("%Y%m%d")
+        self.run_worker(self.refresh_data())
+
+    def goto_today(self) -> None:
+        self.date = None  # None => ESPN default "today"
+        self.run_worker(self.refresh_data())
 
     def _dispatch_refresh(self) -> None:
         handler = getattr(self.screen, "on_data_refresh", None)

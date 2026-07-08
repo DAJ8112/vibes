@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 
 from rich.console import Group
 from rich.text import Text
@@ -30,6 +31,9 @@ _GROUP_LABEL = {
 
 class MatchListScreen(Screen):
     BINDINGS = [
+        ("left_square_bracket", "prev_day", "Prev day"),
+        ("right_square_bracket", "next_day", "Next day"),
+        ("t", "today", "Today"),
         ("r", "refresh", "Refresh"),
         ("q", "quit", "Quit"),
     ]
@@ -70,8 +74,19 @@ class MatchListScreen(Screen):
         name = "FIFA World Cup 2026" if league == "fifa.world" else league
         t = Text()
         t.append("◉ ", style=theme.AMBER)
-        t.append(f"{name.upper()} — LIVE SCORES", style=f"bold {theme.AMBER}")
+        t.append(f"{name.upper()} — ", style=f"bold {theme.AMBER}")
+        t.append(self._date_label(self.app.date), style=f"bold {theme.AMBER}")
         return t
+
+    @staticmethod
+    def _date_label(date: str | None) -> str:
+        if not date:
+            return "TODAY"
+        try:
+            d = datetime.strptime(date, "%Y%m%d")
+        except ValueError:
+            return date
+        return f"{d:%a} · {d.day} {d:%b} {d.year}".upper()
 
     # Called by the app after every poll.
     def on_data_refresh(self) -> None:
@@ -99,9 +114,11 @@ class MatchListScreen(Screen):
                 ol.add_option(Option(Group(Text(""), header), disabled=True))
             ol.add_option(Option(self._row(m), id=m.id))
         if not self.app.matches:
-            ol.add_option(Option(Text("No matches today.", style=theme.TEXT_DIM), disabled=True))
+            empty = "No matches today." if self.app.date is None else "No matches on this date."
+            ol.add_option(Option(Text(empty, style=theme.TEXT_DIM), disabled=True))
 
         self._highlight(ol, prev_id)
+        self.query_one("#list-title", Static).update(self._title())
         self._update_status()
 
         any_live = any(m.is_live for m in self.app.matches)
@@ -132,10 +149,12 @@ class MatchListScreen(Screen):
         else:
             state = Text("loading…", style=theme.TEXT_DIM)
         n_live = sum(1 for m in app.matches if m.is_live)
+        when = "today" if app.date is None else "that day"
         line = Text()
         line.append_text(state)
-        line.append(f"   {n_live} live · {len(app.matches)} today", style=theme.TEXT_DIM)
-        line.append("    ↵ open match  ·  r refresh  ·  q quit", style=theme.TEXT_DIM)
+        line.append(f"   {n_live} live · {len(app.matches)} {when}", style=theme.TEXT_DIM)
+        line.append("    ↵ open  ·  [ ] day  ·  t today  ·  r refresh  ·  q quit",
+                    style=theme.TEXT_DIM)
         self.query_one("#list-status", Static).update(line)
 
     def _row(self, m: Match, phase: int = 0) -> Group:
@@ -221,3 +240,12 @@ class MatchListScreen(Screen):
 
     def action_refresh(self) -> None:
         self.app.run_worker(self.app.refresh_data())
+
+    def action_prev_day(self) -> None:
+        self.app.shift_date(-1)
+
+    def action_next_day(self) -> None:
+        self.app.shift_date(1)
+
+    def action_today(self) -> None:
+        self.app.goto_today()
