@@ -10,7 +10,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
 
-from ...api.models import Match, MatchState, Team
+from ...api.models import Match, MatchExtras, MatchState, Team
 from ...art import theme
 from ...art.pixelflags import team_mark
 from .pixelscore import PixelScore
@@ -35,7 +35,7 @@ class ScoreBoard(Vertical):
         self._clock_base: float | None = None
         self._clock_anchor = 0.0
 
-    def update_match(self, m: Match) -> None:
+    def update_match(self, m: Match, extras: MatchExtras | None = None) -> None:
         self._match = m
         if m.clock_seconds != self._clock_base:
             self._clock_base = m.clock_seconds
@@ -49,7 +49,7 @@ class ScoreBoard(Vertical):
             score.set_score(m.home.score, m.away.score, m.home.color_hex, m.away.color_hex)
         self.query_one("#status-line", Static).update(self._status(m))
         self.query_one("#board-footer", Static).update(self._footer(m))
-        self.query_one(ShootoutPanel).update_match(m)
+        self.query_one(ShootoutPanel).update_match(m, extras)
 
     def set_header(self, left: Text, right: Text) -> None:
         """Render the top strip: league/round/venue (left), refresh state (right)."""

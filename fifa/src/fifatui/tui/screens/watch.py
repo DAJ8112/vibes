@@ -69,6 +69,7 @@ class WatchScreen(Screen):
         self._pinned = "possession"
         self._extras: MatchExtras | None = None
         self._extras_ts = 0.0
+        self._shootout_pending = False
 
     def compose(self) -> ComposeResult:
         yield ScoreBoard()
@@ -132,7 +133,9 @@ class WatchScreen(Screen):
             return
 
         new_events = self._detect_new_events(m)
-        self.query_one(ScoreBoard).update_match(m)
+        extras = self.cached_extras()
+        self.query_one(ScoreBoard).update_match(m, extras)
+        self._maybe_fetch_shootout(m, extras)
         self.query_one(SidePanel).update_match(m, pinned=self._pinned)
         self.query_one(ScoreTicker).update_matches(self.app.matches, exclude_id=self.match_id)
         self._update_board_header(m)
@@ -305,6 +308,19 @@ class WatchScreen(Screen):
 
     def request_extras(self, callback) -> None:
         self.app.run_worker(self._fetch_extras(callback), exclusive=False)
+
+    def _maybe_fetch_shootout(self, m: Match, extras: MatchExtras | None) -> None:
+        """Missed kicks live only in the summary, so pull it once for a shootout match."""
+        if (m.has_shootout and not self.demo and not self._shootout_pending
+                and (extras is None or not extras.shootout)):
+            self._shootout_pending = True
+            self.request_extras(self._on_shootout_extras)
+
+    def _on_shootout_extras(self, extras: MatchExtras | None) -> None:
+        self._shootout_pending = False
+        m = self.current_match()
+        if m is not None and extras is not None and extras.shootout:
+            self.query_one(ScoreBoard).update_match(m, extras)
 
     async def _fetch_extras(self, callback) -> None:
         extras: MatchExtras | None = None

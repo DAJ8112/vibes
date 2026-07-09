@@ -23,6 +23,7 @@ from .models import (
     MatchEvent,
     MatchExtras,
     MatchState,
+    PenaltyKick,
     Team,
     TeamStats,
 )
@@ -243,6 +244,16 @@ def parse_summary(payload: dict) -> MatchExtras:
         extras.commentary.append(
             CommentaryLine(minute=clock.get("displayValue", ""), text=text)
         )
+
+    for block in payload.get("shootout") or []:
+        tid = str(block.get("id") or "")
+        for shot in block.get("shots") or []:
+            extras.shootout.append(PenaltyKick(
+                team_id=tid,
+                order=_to_int(shot.get("shotNumber")),
+                player=shot.get("player", ""),
+                scored=bool(shot.get("didScore")),
+            ))
 
     return extras
 

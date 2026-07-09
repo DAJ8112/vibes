@@ -1,11 +1,24 @@
 """Shootout kick derivation and the ShootoutPanel tracker widget."""
 
 from rich.console import Group
+from rich.text import Text
 
 from fifatui.api import EventType, MatchEvent
+from fifatui.api.models import MatchExtras, PenaltyKick
 from fifatui.tui.app import FifaApp
 from fifatui.tui.widgets import EventFeed, ShootoutPanel
-from fifatui.tui.widgets.shootout import kick_scored, latest_kick, shootout_kicks
+from fifatui.tui.widgets.shootout import (
+    MARK_MISSED,
+    MARK_SCORED,
+    kick_scored,
+    latest_kick,
+    shootout_kicks,
+)
+
+
+def _plain(group) -> str:
+    parts = group.renderables if isinstance(group, Group) else [group]
+    return "\n".join(p.plain for p in parts if isinstance(p, Text))
 
 
 def _shootout_match(matches):
@@ -45,6 +58,41 @@ def test_feed_omits_shootout_rows(matches):
     built = EventFeed()._build(m)
     rows = built.renderables if isinstance(built, Group) else [built]
     assert "Penalty" not in "\n".join(r.plain for r in rows)
+
+
+def _extras_sui_col():
+    # SUI ✓✓✗✓✓ (4), COL ✓✗✓✗✓ (3) — home id 475 (SUI), away id 208 (COL).
+    return MatchExtras(shootout=[
+        PenaltyKick("208", 1, "Quintero", True),
+        PenaltyKick("208", 2, "Sánchez", False),
+        PenaltyKick("208", 3, "Campaz", True),
+        PenaltyKick("208", 4, "Cucho", False),
+        PenaltyKick("208", 5, "Díaz", True),
+        PenaltyKick("475", 1, "Xhaka", True),
+        PenaltyKick("475", 2, "Amdouni", True),
+        PenaltyKick("475", 3, "Akanji", False),
+        PenaltyKick("475", 4, "Itten", True),
+        PenaltyKick("475", 5, "Vargas", True),
+    ])
+
+
+def test_extras_rows_render_misses(matches):
+    m = _shootout_match(matches)
+    m.home.id, m.away.id = "475", "208"  # SUI home, COL away
+    home, away, latest = ShootoutPanel._kick_rows(m, _extras_sui_col())
+    assert [k.scored for k in home] == [True, True, False, True, True]   # SUI
+    assert [k.scored for k in away] == [True, False, True, False, True]  # COL
+    assert latest.player in ("Díaz", "Vargas")  # highest order kick
+
+
+def test_extras_wins_over_events_and_draws_missed(matches):
+    m = _shootout_match(matches)  # fixture events are scored-only
+    m.home.id, m.away.id = "475", "208"
+    panel = ShootoutPanel()
+    panel.update_match(m, _extras_sui_col())
+    text = _plain(panel._build(m, *ShootoutPanel._kick_rows(m, _extras_sui_col())))
+    assert MARK_MISSED in text   # ▒▒ now shown (from summary), not just ██
+    assert MARK_SCORED in text
 
 
 async def test_panel_visible_for_shootout_match(fixture_source):

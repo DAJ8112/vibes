@@ -143,6 +143,18 @@ class CommentaryLine:
 
 
 @dataclass
+class PenaltyKick:
+    """One shootout kick. ``team_id`` matches ``Team.id``; ``order`` is ESPN's per-team
+    ``shotNumber`` (1-based). Only the ``summary`` endpoint reports missed kicks — the
+    scoreboard feed lists scored penalties only."""
+
+    team_id: str
+    order: int
+    player: str
+    scored: bool
+
+
+@dataclass
 class MatchExtras:
     """Richer per-match detail from ESPN's ``summary`` endpoint (fetched on demand).
 
@@ -158,6 +170,8 @@ class MatchExtras:
     commentary: list[CommentaryLine] = field(default_factory=list)  # oldest first
     #: Full boxscore comparison table, ordered: (label, home_display, away_display).
     stat_rows: list[tuple[str, str, str]] = field(default_factory=list)
+    #: Full shootout kick sequence incl. misses (summary only), per team in kick order.
+    shootout: list[PenaltyKick] = field(default_factory=list)
 
 
 @dataclass
