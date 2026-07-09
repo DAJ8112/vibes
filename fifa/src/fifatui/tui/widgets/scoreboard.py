@@ -109,9 +109,6 @@ class ScoreBoard(Vertical):
 
     @staticmethod
     def _footer(m: Match) -> Text:
-        bits = []
-        if m.note:
-            bits.append(m.note)
-        if m.is_upcoming and m.kickoff_et():
-            bits.append(f"kickoff {m.kickoff_et()} ET")
-        return Text("   ·   ".join(bits), style=theme.DIM)
+        # Kickoff time is shown in the status line (_status); keep the footer to the
+        # round/group note so it isn't printed twice.
+        return Text(m.note or "", style=theme.DIM)
