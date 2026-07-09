@@ -16,26 +16,27 @@ def _upcoming(match, new_id, date):
 
 
 class RangeAwareSource:
-    """Returns a multi-day PRE slate for a range 'YYYYMMDD-YYYYMMDD', else one day."""
+    """Returns a multi-day PRE slate for a range 'YYYYMMDD-YYYYMMDD', else `today`."""
 
-    def __init__(self, matches):
+    def __init__(self, matches, today=None):
         self.upcoming = [
             _upcoming(matches[0], "UP-1", "2026-07-09T20:00Z"),  # THU 9 JUL
             _upcoming(matches[0], "UP-2", "2026-07-10T19:00Z"),  # FRI 10 JUL
             _upcoming(matches[0], "UP-3", "2026-07-11T21:00Z"),  # SAT 11 JUL
         ]
+        self.today = list(today) if today else []
         self.calls = []
 
     async def scoreboard(self, league="fifa.world", date=None):
         self.calls.append(date)
-        return list(self.upcoming) if date and "-" in date else []
+        return list(self.upcoming) if date and "-" in date else list(self.today)
 
     async def summary(self, league, match_id):
         return None
 
 
 async def test_n_enters_upcoming_range_view(matches):
-    src = RangeAwareSource(matches)
+    src = RangeAwareSource(matches, today=matches)  # non-empty today → stays on today
     app = FifaApp(source=src, refresh=5.0)
     async with app.run_test(size=(100, 34)) as pilot:
         await pilot.pause(0.3)
@@ -57,11 +58,40 @@ async def test_n_enters_upcoming_range_view(matches):
         assert ol.option_count == 6
 
 
-async def test_escape_and_today_leave_upcoming(matches):
+async def test_empty_today_defaults_to_upcoming(matches):
+    # RangeAwareSource returns [] for a single day and the slate for a range,
+    # so first load (empty today) should auto-switch to the upcoming view.
     src = RangeAwareSource(matches)
     app = FifaApp(source=src, refresh=5.0)
     async with app.run_test(size=(100, 34)) as pilot:
+        await pilot.pause(0.4)
+        assert app.upcoming is True
+        assert "UPCOMING" in app.screen.query_one("#list-title").render().plain
+        assert app.screen.query_one("#match-list").get_option_index("UP-1") is not None
+
+
+async def test_nonempty_today_stays_on_today(matches):
+    # Source returns today's matches for a single day → no auto-switch.
+    class TodaySource(RangeAwareSource):
+        async def scoreboard(self, league="fifa.world", date=None):
+            self.calls.append(date)
+            if date and "-" in date:
+                return list(self.upcoming)
+            return list(matches)
+
+    app = FifaApp(source=TodaySource(matches), refresh=5.0)
+    async with app.run_test(size=(100, 34)) as pilot:
+        await pilot.pause(0.4)
+        assert app.upcoming is False
+        assert "TODAY" in app.screen.query_one("#list-title").render().plain
+
+
+async def test_escape_and_today_leave_upcoming(matches):
+    src = RangeAwareSource(matches, today=matches)
+    app = FifaApp(source=src, refresh=5.0)
+    async with app.run_test(size=(100, 34)) as pilot:
         await pilot.pause(0.3)
+        assert app.upcoming is False
         await pilot.press("n")
         await pilot.pause(0.3)
         assert app.upcoming is True

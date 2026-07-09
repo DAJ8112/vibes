@@ -94,7 +94,13 @@ class FifaApp(App):
         self._dispatch_refresh()
         if self._first_load:
             self._first_load = False
-            self._handle_autostart()
+            opened = self._handle_autostart()
+            # Nothing on today's slate? Land on the upcoming fixtures instead of an
+            # empty screen. Only on the default "today" view (not an explicit --date),
+            # and only when the fetch actually succeeded.
+            if (not opened and not self.upcoming and self.date is None
+                    and self.connection_ok and not self.matches):
+                self.show_upcoming()
 
     def _base_date(self) -> datetime:
         if self.date:
@@ -123,7 +129,8 @@ class FifaApp(App):
         if callable(handler):
             handler()
 
-    def _handle_autostart(self) -> None:
+    def _handle_autostart(self) -> bool:
+        """Open the --match / --demo target on first load. Returns True if one opened."""
         target: Match | None = None
         if self.start_match:
             target = self.match_by_id(self.start_match) or self.find_match(self.start_match)
@@ -133,6 +140,8 @@ class FifaApp(App):
             )
         if target is not None:
             self.open_match(target.id, demo=self.demo)
+            return True
+        return False
 
     def match_by_id(self, match_id: str) -> Match | None:
         return next((m for m in self.matches if m.id == match_id), None)
